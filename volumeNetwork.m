@@ -34,7 +34,13 @@ active_spikes = cell(delay_max, 1);
 active_idx = 1;
 
 % Synpatic links
-post = ones(N, N_out) * N;  % TODO will need to fix when multiple out
+% Post is who is postsynaptic from a pre. N x M, M is number of connections
+post = ones(N_inp, N_out) * N;  % TODO will need to fix when multiple out
+post(700) = N-1;
+post(800) = N-2;
+% delays{from_neuron, delay} is the location in post that gives the post
+% synaptic neuron, for example: 
+% to_neuron = post(from_neuron, delay{from_neuron, delay});
 delays = randi([1, delay_max], N, 1); % TODO - Fix for multiple output
 
 % Info logging variables
@@ -43,8 +49,8 @@ vt = zeros(N, ms_per_sec);
 vt(:, 1) = v;
 
 %% DATA
-inp = [50, 100, 200, 500];
-ts = [2005, 2007, 2050, 2055];
+inp = [50, 100, 200, 500, 700, 800];
+ts = [2005, 2007, 2050, 2055, 2100, 2500];
 
 %% Main computation loop
 for sec = 1 : sim_time_sec
@@ -61,8 +67,8 @@ for sec = 1 : sim_time_sec
         
         for spike = 1 : length(incoming)
             from_neuron = incoming(spike);
-            
-            v(N) = v(N) + w(from_neuron); % TODO - conductance based?
+            to_neuron = post(from_neuron);
+            v(to_neuron) = v(to_neuron) + w(from_neuron); % TODO - conductance based?
         end
         
         % Log spike arrivals for plotting later
