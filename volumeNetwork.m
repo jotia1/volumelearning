@@ -14,9 +14,10 @@ N_inp = 1000;
 N_out = 3;
 N = N_inp + N_out;
 sim_time_sec = 3;
-delay_max = 1;
+delay_max = 10;
 syn_mean_thresh = w_init-0.1;
 w_max = 1;
+num_dendrites = 10;
 
 % Constants and conversions
 ms_per_sec = 1000;
@@ -29,13 +30,23 @@ neuron_tau = 20;
 v = v_rest * ones(N, 1);  %TODO - Fix for multiple output
 w = ones(N, 1) * w_init;  % TODO - Fix for multiple output
 
+% Synapse dynamics parameters
+g = zeros(N, 1);
+k = 10; % TODO - what is k? why is it 10?!
+sigma_max = 7;
+sigma_min = 2;  % TODO where did i get all these variables from...
+u_max = 15;
+sigma = rand(N, 1) * (sigma_max - sigma_min) + sigma_min;
+u = rand(N, 1) * u_max;
+last_spike_time = zeros(N, 1) * -Inf;
+
 % Spike propagation 
 active_spikes = cell(delay_max, 1);
 active_idx = 1;
 
 % Synpatic links
 % Post is who is postsynaptic from a pre. N x M, M is number of connections
-post = ones(N_inp, N_out) * N;  % TODO will need to fix when multiple out
+post = ones(N_out, M) * N;  % TODO will need to fix when multiple out
 post(700) = N-1;
 post(800) = N-2;
 % delays{from_neuron, delay} is the location in post that gives the post
@@ -47,6 +58,7 @@ delays = randi([1, delay_max], N, 1); % TODO - Fix for multiple output
 spike_arrival_trace = [];
 vt = zeros(N, ms_per_sec);
 vt(:, 1) = v;
+debug = [];
 
 %% DATA
 inp = [50, 100, 200, 500, 700, 800];
@@ -57,8 +69,20 @@ for sec = 1 : sim_time_sec
     for ms = 1 : ms_per_sec
         time = (sec - 1) * ms_per_sec + ms;  
         
-        if time == 9
-            disp(''); 
+        %% Calculate input to neurons at this time step
+        % Input is 
+        Iapp = zeros(N, 1);
+        t0 = time - last_spike_time;
+        t0negu = t0 - u;
+        scale = 1 ./ (sigma * sqrt(2 * pi));
+        g = scale .* exp((-1/2) .* ((t0negu) ./ sigma) .^2 );
+        g(isnan(g)) = 0;
+        spike_effects = w .* g;
+        pres = pre{post};
+        Iapp(post) = spike_effects; 
+        %debug = [debug; g(500), g(700), g(800)];
+        if time == 2075
+           disp(''); 
         end
         
         %% Deal with spikes that have arrived
@@ -68,7 +92,8 @@ for sec = 1 : sim_time_sec
         for spike = 1 : length(incoming)
             from_neuron = incoming(spike);
             to_neuron = post(from_neuron);
-            v(to_neuron) = v(to_neuron) + w(from_neuron); % TODO - conductance based?
+            % TODO - remove below, instantaneous application
+            %v(to_neuron) = v(to_neuron) + w(from_neuron); % TODO - conductance based?
         end
         
         % Log spike arrivals for plotting later
@@ -77,12 +102,12 @@ for sec = 1 : sim_time_sec
 
         
         %% Update membrane voltages
-        v = v + (v_rest - v) / neuron_tau;
+        v = v + (v_rest + Iapp - v) / neuron_tau;
         vt(:, ms) = v;
         
         %% Deal with neurons that just spiked
         fired = [find(v >=v_thres); inp(ts == time)'];
-        %spike_times(fired) = time;  % remember so we can draw later
+        last_spike_time(fired) = time;  % Used for calculating dynamics later
         %spike_times_trace = [spike_times_trace; time*ones(length(fired), 1), fired];
         
         for spike = 1 : length(fired)
