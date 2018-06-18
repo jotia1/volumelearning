@@ -7,7 +7,7 @@
 %   - 
 %
 
-
+rand('seed', 1);
 % Often tweaked parameters
 N_inp = 1000;
 N_out = 5;
@@ -70,8 +70,10 @@ vt(:, 1) = v;
 debug = [];
 
 %% DATA
-inp = [50, 100, 200, 500, 700, 800, 801, 802, 803, 804];
-ts = [5, 7, 50, 55, 100, 525, 505, 500, 500, 500];
+%inp = [50, 100, 200, 500, 700, 800, 801, 802, 803, 804];
+%ts = [5, 7, 50, 55, 100, 525, 505, 500, 500, 500];
+inp = [800 1003 801 1003];
+ts = [500 520 530 550];
 
 %% Main computation loop
 for sec = 1 : sim_time_sec
@@ -184,17 +186,17 @@ for sec = 1 : sim_time_sec
     
     %% Plot results from this second of processing
     subplot(2, 1, 1);
-    plot(1:ms_per_sec, vt(N-2: end, :));
+    plot(1:ms_per_sec, vt(N-2, :));
     title(sprintf('second: %d', sec-1));
     %axis([500 600 -Inf Inf]);
-    legend({'N-2','N-1','N'});
+    legend({'1003'});
     drawnow;
     
     % Plot STDP params to validate testing
     subplot(2, 1, 2);
     plot(debug);
     %axis([500 600 55 55.2]);
-    legend({'w-800-25', 'w-801-5', 'w-802-0'});
+    legend({'w-800', 'w-801', 'w-802'});
     
     
     %% Reset second facilitating variables
