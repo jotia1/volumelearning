@@ -8,15 +8,16 @@
 %
 
 rand('seed', 1);
+%clear;
 % Often tweaked parameters
-N_inp = 1000;
-N_out = 5;
+N_inp = 2000;
+N_out = 1;
 N = N_inp + N_out;
-sim_time_sec = 1;
-delay_max = 20;
+sim_time_sec = 25;
+delay_max = 1;
 num_connections = 3;
-w_init = 55;
-w_max = 100;
+w_init = 0.45;
+w_max = 1;
 syn_mean_thresh = w_init / 2;
 
 assert(w_init > syn_mean_thresh, 'SS will interfere');
@@ -48,15 +49,14 @@ delays = ceil(rand(N, num_connections) * delay_max);
 last_spike_time = zeros(N, 1) * -Inf;
 
 % STDP variables
-taupre = 20;
-taupost = 20;
-Apre = 0.1;
-Apost = -0.12;
+taupre = 20;       % NOTE ABOUT STDP WITH DATA EXAMPLE:
+taupost = 20;      % This example is somewhat cherry picked, small
+Apre = 0.1;        % changes result in large destabilisations of learning
+Apost = -0.12;     % Something is still wrong.
 STDPdecaypre = exp(-1/taupre);
 STDPdecaypost = exp(-1/taupost);
-% dApre/post represent the activity pre/post synaptically, dApre needs to
-% be [N x conn] as each connection can have different activity, post is
-% always per neuron so doesn't need to differentiate between connections.
+% dApre/post represent the decayed activity of when pre/post synaptic
+% neurons fired. It is the amount to change weights by.
 dApre = zeros(N, num_connections);
 dApost = zeros(N, 1);
 active_spikes = cell(delay_max, 1);  % To track when spikes arrive
@@ -64,7 +64,8 @@ active_idx = 1;
 % TODO - later this is where I would put the pre variable
 
 % Info logging variables
-spike_arrival_trace = [];
+%spike_arrival_trace = [];
+spike_times_trace = [];
 vt = zeros(N, ms_per_sec);
 vt(:, 1) = v;
 debug = [];
@@ -74,9 +75,12 @@ debug = [];
 %ts = [5, 7, 50, 55, 100, 525, 505, 500, 500, 500];
 inp = [800 1003 801 1003];
 ts = [500 520 530 550];
+[ inp, ts, patt_inp, patt_ts ] = embedPat( N_inp );
 
 %% Main computation loop
 for sec = 1 : sim_time_sec
+    [ inp, ts, patt_inp, patt_ts ] = embedPat( N_inp, patt_inp, patt_ts );
+    ts = ts + (sec-1) * 1000;
     for ms = 1 : ms_per_sec
         time = (sec - 1) * ms_per_sec + ms;  
         
@@ -105,23 +109,10 @@ for sec = 1 : sim_time_sec
             incoming_idxs = sub2ind(size(dApre), incoming(:, 1), incoming(:,2));
 
             dApre(incoming_idxs) = dApre(incoming_idxs) + Apre;
-
-             for spike = 1 : length(incoming_idxs)
-                from_neuron = incoming(spike, 1);
-                to_neuron = post(from_neuron);
-                conn = incoming(spike, 2);
-                
-                % Just recieved input at post synaptic (meaning pre-fired
-                % and post potentially hasn't/wont), decrease weight
-                %w(from_neuron, conn) = w(from_neuron, conn) + dApost(from_neuron, conn);
-                
-                % TODO - remove below, instantaneous application
-                %v(to_neuron) = v(to_neuron) + w(from_neuron); % TODO - conductance based?
-            end
-    %         
-    %         Log spike arrivals for plotting later
-    %         spike_arrival_trace = [spike_arrival_trace; 
-    %                                time*ones(length(incoming),1), incoming];
+  
+%             Log spike arrivals for plotting later
+%             spike_arrival_trace = [spike_arrival_trace; 
+%                                    time*ones(length(incoming),1), incoming];
         end
 
         
@@ -131,33 +122,21 @@ for sec = 1 : sim_time_sec
         
         %% Deal with neurons that just spiked
         fired = [find(v >=v_thres); inp(ts == time)'];
+        spike_times_trace = [spike_times_trace; time*ones(length(fired),1), fired];
         last_spike_time(fired) = time;  % Used in synapse dynamics
         
         for spike = 1 : length(fired)
             neuron = fired(spike);
             v(neuron) = v_reset;
             
-            % If you spike, all your workers weights go up by how active
-            % they have been and all your weights go down by how active
-            % your bosses have been. 
-            
-            % Post synaptic neuron (this one) has fired, thus we need to go
-            % back and reinforce w on any pre-synaptics
-            % TODO - can be more efficient, define a 'pre' cell array
-            presynaptic_idxs = find(post == neuron);    
+            presynaptic_idxs = find(post == neuron);   
+            % I spiked, reinforce any before me
             w(presynaptic_idxs) = w(presynaptic_idxs) + dApre(presynaptic_idxs);
-            
-            % Also weaken this neurons connections to its posts and they
-            % have not/might not spike in response to this action
-            %postsynaptic_idxs = sub2ind(size(dApost), post(neuron, :), 1:num_connections);
-            w(neuron, :) = w(neuron, :) + dApost(post(neuron, :))'; %dApost(postsynaptic_idxs);
+            % weaken connections to any after me who spiked not long ago
+            w(neuron, :) = w(neuron, :) + dApost(post(neuron, :))'; 
             
             dApost(neuron) = dApost(neuron) + Apost;
-            
-            if neuron == 800
-                disp('');
-            end
-            
+
             for connection = 1:num_connections
                 % Keep track of when this spike will arrive at each
                 % postsynaptic neuron and through which connection.
@@ -185,19 +164,34 @@ for sec = 1 : sim_time_sec
     end
     
     %% Plot results from this second of processing
+    clf
     subplot(2, 1, 1);
-    plot(1:ms_per_sec, vt(N-2, :));
+    offset = (sec - 1) * 1000;
+    filter = find(spike_times_trace(:,2) > N_inp & spike_times_trace(:,1) > offset);
+    l2_spike_idxs = spike_times_trace(filter, 2);
+    l2_spike_times = spike_times_trace(filter, 1);
+    filter = find(spike_times_trace(:, 1) > offset);
+    l1_idxs = spike_times_trace(filter, 2);
+    l1_times = spike_times_trace(filter, 1);
+    % Note this is the SPIKE TIME (not arrival time)
+    plot(l1_times - offset, l1_idxs, '.', 'MarkerSize', 8);
+    hold on 
+    plot(l2_spike_times - offset, l2_spike_idxs, '.r', 'MarkerSize', 14)
+    if numel(l2_spike_times) > 0
+        for i = l2_spike_times
+            plot( [i i] - offset, get( gca, 'Ylim' ), '--r', 'LineWidth',2)
+        end
+    end
+    
+    
+    subplot(2, 1, 2);
+    plot(1:ms_per_sec, vt(N, :));
     title(sprintf('second: %d', sec-1));
     %axis([500 600 -Inf Inf]);
-    legend({'1003'});
+    legend({'Output neuron'});
     drawnow;
     
-    % Plot STDP params to validate testing
-    subplot(2, 1, 2);
-    plot(debug);
-    %axis([500 600 55 55.2]);
-    legend({'w-800', 'w-801', 'w-802'});
-    
+    hold off;
     
     %% Reset second facilitating variables
     spike_times_trace = [];
