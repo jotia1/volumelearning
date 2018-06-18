@@ -1,12 +1,16 @@
 # volumelearning
 Matlab scripts to demonstrate learning spatial and temporal signals in spiking networks. Code is structured around the main file [volumeNetwork](volumeNetwork.m) which can run when invoked with a matlab interpreter.
 
-More specificallly this is a two layer network of LIF neurons with gaussian current based, time delayed synapses. Ideas and inspiration are taken from [1, 2].
-General information about quirks and issues during development can be found on [this google doc](https://docs.google.com/document/d/1mJY0HtCmyt_8qT5UmYbZxuVqA2B_u3qlE3r0deTQxLY/edit?usp=sharing).
+More specificallly this is a two layer network of LIF neurons with gaussian current based, time delayed synapses. 
+Ideas and inspiration are taken from [1, 2].
+The significance of this particular work (like [1, 2]) is that temporal information is represented explicitly (through connection delays).
+This means the network is actually learning to represent (and predict) spatial (which neurons fire) and temporal (when they fire) information. 
+In contrast models without delays focus on spatial information (which neurons fire roughly together) but focus less on the precise order.
+General information about quirks and issues during development can be found in [this google doc](https://docs.google.com/document/d/1mJY0HtCmyt_8qT5UmYbZxuVqA2B_u3qlE3r0deTQxLY/edit?usp=sharing).
 
 ## Interesting milestones
 - Demo of Multiple gaussian output synapses [working](https://github.com/jotia1/volumelearning/commit/ba17a45eb05bd605f451f3f4510fb89df9917564)
-- STDP and Synaptic scaling working [demo](https://github.com/jotia1/volumelearning/commit/a4d03ad126d3b05776fe476b21816eaa8e9c9952)
+- STDP and Synaptic scaling working [demo](https://github.com/jotia1/volumelearning/commit/a4d03ad126d3b05776fe476b21816eaa8e9c9952) (cherry picked parameters)
 
 ## Current features
 - [x] Gaussian synapses
