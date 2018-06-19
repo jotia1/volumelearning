@@ -6,15 +6,15 @@ rand('seed', 1);
 clear;
 
 % Often tweaked parameters
-N_inp = 2000;
+N_inp = 16*16;
 N_out = 7;
 N = N_inp + N_out;
 sim_time_sec = 300;
 delay_max = 20;
 num_connections = 3;
-w_init = 0.65*2;
-w_max = 5;
-syn_mean_thresh = w_init * 0.6;
+w_init = 100;
+w_max = w_init * 1.5;
+syn_mean_thresh = w_init * 0.75;
 
 assert(w_init > syn_mean_thresh, 'SS will interfere');
 assert(w_init < w_max, 'Careful synaptic scaling will limit weights');
@@ -33,6 +33,7 @@ w = ones(N, num_connections) * w_init;
 % Synpatic links 
 % Post is who is postsynaptic from a pre. N x M, M is number of connections
 post = randi([N_inp + 1, N], N, num_connections);
+w(N_inp + 1 : end, :) = 0;
 
 % Synapse dynamics parameters
 g = zeros(N, 1);
@@ -79,13 +80,16 @@ debug = [];
 %ts = [5, 7, 50, 55, 100, 525, 505, 500, 500, 500];
 inp = [800 1003 801 1003];
 ts = [500 520 530 550];
-[ inp, ts, patt_inp, patt_ts ] = embedPat( N_inp );
+%[ inp, ts, patt_inp, patt_ts ] = embedPat( N_inp );
+[xs, ys, ts, ps] = loadDVSsegment(16, false, 0);
+inp = sub2ind([16 16], xs, ys);
+ts = floor(ts /1000);
 
 %% Main computation loop
 for sec = 1 : sim_time_sec
-    [ inp, ts, patt_inp, patt_ts ] = embedPat( N_inp, patt_inp, patt_ts );
+    %[ inp, ts, patt_inp, patt_ts ] = embedPat( N_inp, patt_inp, patt_ts );
     tic;
-    ts = ts + (sec-1) * 1000;
+    %ts = ts + (sec-1) * 1000;
     for ms = 1 : ms_per_sec
         time = (sec - 1) * ms_per_sec + ms;  
         
@@ -242,4 +246,5 @@ for sec = 1 : sim_time_sec
     vt(:, 1) = v;
     toc;
     fprintf('Second: %d\n', sec);
+    waitforbuttonpress;
 end
