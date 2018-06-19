@@ -8,17 +8,17 @@
 %
 
 rand('seed', 1);
-%clear;
+clear;
 % Often tweaked parameters
 N_inp = 2000;
-N_out = 1;
+N_out = 3;
 N = N_inp + N_out;
-sim_time_sec = 25;
+sim_time_sec = 77;
 delay_max = 1;
 num_connections = 3;
-w_init = 0.45;
+w_init = 0.85;
 w_max = 1;
-syn_mean_thresh = w_init / 2;
+syn_mean_thresh = w_init * 0.6;
 
 assert(w_init > syn_mean_thresh, 'SS will interfere');
 assert(w_init < w_max, 'Careful synaptic scaling will limit weights');
@@ -36,17 +36,24 @@ w = ones(N, num_connections) * w_init;
 
 % Synpatic links 
 % Post is who is postsynaptic from a pre. N x M, M is number of connections
-post = ones(N, num_connections) * N; 
-post(700, 1) = N-1; %TODO - Create actual connectivity, this is just a demo
-post(800:804, :) = N-2;
+post = randi([N_inp + 1, N], N, num_connections); %ones(N, num_connections) * N; 
 
 % Synapse dynamics parameters
 g = zeros(N, 1);
-sigma_max = 7;
-sigma_min = 2;  % TODO where did i get all these variables from...
+sigma_max = 10;
+sigma_min = 0.1;  % TODO where did i get all these variables from...
 sigma = rand(N, 1) * (sigma_max - sigma_min) + sigma_min;
 delays = ceil(rand(N, num_connections) * delay_max);
 last_spike_time = zeros(N, 1) * -Inf;
+
+%% SDVL variables
+a1 = 0;         % Mean lower bound
+a2 = 0;         % Mean upper bound
+b1 = 0;         % Variance lower bound
+b2 = 0;         % Variance upper bound
+k = 0;          % Learning accelerator (scaling factor)
+nu = 0;         % Learning rate (for the mean)
+nv = 0;         % Learning rate (for the variance
 
 % STDP variables
 taupre = 20;       % NOTE ABOUT STDP WITH DATA EXAMPLE:
@@ -61,7 +68,6 @@ dApre = zeros(N, num_connections);
 dApost = zeros(N, 1);
 active_spikes = cell(delay_max, 1);  % To track when spikes arrive
 active_idx = 1;
-% TODO - later this is where I would put the pre variable
 
 % Info logging variables
 %spike_arrival_trace = [];
@@ -97,17 +103,19 @@ for sec = 1 : sim_time_sec
         [to_neurons, ~, to_neurons_idx] = unique(post);
         Iapp(to_neurons) = accumarray(to_neurons_idx, gaussian_values(:));
         
-        debug = [debug; mean(w(800, :)), mean(w(801, 1)), mean(w(802, 1))];
+        %debug = [debug; mean(w(800, :)), mean(w(801, 1)), mean(w(802, 1))];
         if time == 2110
            disp(''); 
         end
         
-        %% Update STDP
-        incoming = active_spikes{active_idx}; % Get spikes arriving now
+        %% An incoming spike arrived at a neuron
+        incoming = active_spikes{active_idx}; 
         if ~isempty(incoming)
             active_spikes{active_idx} = [];
+            % incoming(:,1) is pre-syn neuron, incoming(:, 2) is connection
             incoming_idxs = sub2ind(size(dApre), incoming(:, 1), incoming(:,2));
-
+            
+            % Update STDP variables
             dApre(incoming_idxs) = dApre(incoming_idxs) + Apre;
   
 %             Log spike arrivals for plotting later
@@ -123,12 +131,13 @@ for sec = 1 : sim_time_sec
         %% Deal with neurons that just spiked
         fired = [find(v >=v_thres); inp(ts == time)'];
         spike_times_trace = [spike_times_trace; time*ones(length(fired),1), fired];
-        last_spike_time(fired) = time;  % Used in synapse dynamics
+        last_spike_time(fired) = time;  % Used in synapse dynamics 
         
         for spike = 1 : length(fired)
             neuron = fired(spike);
             v(neuron) = v_reset;
             
+            % Update STDP variables
             presynaptic_idxs = find(post == neuron);   
             % I spiked, reinforce any before me
             w(presynaptic_idxs) = w(presynaptic_idxs) + dApre(presynaptic_idxs);
@@ -136,6 +145,12 @@ for sec = 1 : sim_time_sec
             w(neuron, :) = w(neuron, :) + dApost(post(neuron, :))'; 
             
             dApost(neuron) = dApost(neuron) + Apost;
+            
+            % Update SVDL
+            % te is temporal error of any pre-synaptic neurons to this
+            % spike
+            [presyn_neurons, ~] = ind2sub(size(post), presynaptic_idxs);
+            te = abs(time - last_spike_time(presyn_neurons));
 
             for connection = 1:num_connections
                 % Keep track of when this spike will arrive at each
@@ -174,21 +189,29 @@ for sec = 1 : sim_time_sec
     l1_idxs = spike_times_trace(filter, 2);
     l1_times = spike_times_trace(filter, 1);
     % Note this is the SPIKE TIME (not arrival time)
-    plot(l1_times - offset, l1_idxs, '.', 'MarkerSize', 8);
+    plot(l1_times - offset, l1_idxs, '.k', 'MarkerSize', 8);
     hold on 
-    plot(l2_spike_times - offset, l2_spike_idxs, '.r', 'MarkerSize', 14)
+    plot(l2_spike_times - offset, l2_spike_idxs, '.r', 'MarkerSize', 8)
+    ax = gca;
     if numel(l2_spike_times) > 0
-        for i = l2_spike_times
-            plot( [i i] - offset, get( gca, 'Ylim' ), '--r', 'LineWidth',2)
+        i = 0;
+        while i < numel(l2_spike_times)
+            i = i + 1;
+            pos = l2_spike_times(i);
+            colour = ax.ColorOrder(l2_spike_idxs(i) - N_inp, :);
+            plot( [pos pos] - offset, get( gca, 'Ylim' ), '--', 'Color', colour, 'LineWidth',2); %, '--', 'MarkerFaceColor', colour, 'MarkerEdgeColor', colour, 'LineWidth',2)
         end
     end
+    xlabel('Time (ms)');
+    ylabel('Neuron number');
     
     
     subplot(2, 1, 2);
-    plot(1:ms_per_sec, vt(N, :));
+    plot(1:ms_per_sec, vt(N_inp + 1:end, :));
     title(sprintf('second: %d', sec-1));
-    %axis([500 600 -Inf Inf]);
-    legend({'Output neuron'});
+    legend({'Neuron 1', 'Neuron 2', 'Neuron 3'});
+    xlabel('Time (ms)');
+    ylabel('Membrane potential (mV)');
     drawnow;
     
     hold off;
