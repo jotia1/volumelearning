@@ -7,7 +7,7 @@ clear;
 
 % Often tweaked parameters
 N_inp = 16*16;
-N_out = 7;
+N_out = 8;
 N = N_inp + N_out;
 sim_time_sec = 300;
 delay_max = 20;
@@ -216,14 +216,13 @@ for sec = 1 : sim_time_sec
     hold on 
     plot(l2_spike_times - offset, l2_spike_idxs, '.r', 'MarkerSize', 8)
     ax = gca;
-    if numel(l2_spike_times) > 0
-        i = 0;
-        while i < numel(l2_spike_times)
-            i = i + 1;
-            pos = l2_spike_times(i);
-            colour = ax.ColorOrder(l2_spike_idxs(i) - N_inp, :);
-            plot( [pos pos] - offset, get( gca, 'Ylim' ), '--', 'Color', colour, 'LineWidth',2);
-        end
+    i = 0;
+    while i < numel(l2_spike_times)
+        i = i + 1;
+        pos = l2_spike_times(i);
+        c_idx = mod(l2_spike_idxs(i) - N_inp - 1, size(ax.ColorOrder, 1)) + 1;
+        colour = ax.ColorOrder(c_idx, :);
+        plot( [pos pos] - offset, get( gca, 'Ylim' ), '--', 'Color', colour, 'LineWidth',2);
     end
     xlabel('Time (ms)');
     ylabel('Neuron number');
