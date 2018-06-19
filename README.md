@@ -16,7 +16,7 @@ General information about quirks and issues during development can be found in [
 - [x] Gaussian synapses [1]
 - [x] Multiple outputs
 - [x] STDP ([all-to-all](http://www.scholarpedia.org/article/Spike-timing_dependent_plasticity#Temporal_all-to-all_versus_nearest-neighbor_spike-interaction))
-- [ ] Delay Learning [1]
+- [x] Delay Learning [1]
 - [ ] Synaptic redistribution rule
 - [ ] convert to auto-encoder setup
 - [ ] Parameter sweep scripts

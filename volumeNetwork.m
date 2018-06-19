@@ -2,22 +2,18 @@
 % Based around the idea that temporal information plays a critical role in
 % learning real world signals this network models conduction delays between
 % neurons and will form synapses essentially sampling for useful places. 
-
-% Features
-%   - 
-%
-
 rand('seed', 1);
 clear;
+
 % Often tweaked parameters
 N_inp = 2000;
-N_out = 3;
+N_out = 7;
 N = N_inp + N_out;
-sim_time_sec = 77;
+sim_time_sec = 300;
 delay_max = 20;
 num_connections = 3;
-w_init = 0.85;
-w_max = 1;
+w_init = 0.65*2;
+w_max = 5;
 syn_mean_thresh = w_init * 0.6;
 
 assert(w_init > syn_mean_thresh, 'SS will interfere');
@@ -36,31 +32,32 @@ w = ones(N, num_connections) * w_init;
 
 % Synpatic links 
 % Post is who is postsynaptic from a pre. N x M, M is number of connections
-post = randi([N_inp + 1, N], N, num_connections); %ones(N, num_connections) * N; 
+post = randi([N_inp + 1, N], N, num_connections);
 
 % Synapse dynamics parameters
 g = zeros(N, 1);
 sigma_max = 10;
-sigma_min = 0.1;  % TODO where did i get all these variables from...
-sigma = rand(N, 1) * (sigma_max - sigma_min) + sigma_min;
+sigma_min = 0.1;
+sigma = rand(N, num_connections) * (sigma_max - sigma_min) + sigma_min;
 delays = ceil(rand(N, num_connections) * delay_max);
 last_spike_time = zeros(N, 1) * -Inf;
 
-%% SDVL variables
-% TODO Initial values taken arbitrarily from (Wright, 2012) paper.
-a1 = 1;         % Move pre towards post time
-a2 = 3;         % Move pre earlier to support post?
+% SDVL variables
+% TODO - Initial values taken arbitrarily from (Wright, 2012) paper. Find
+% sensible values
+a1 = 1;         % 
+a2 = 3;         % 
 b1 = 8;         % 
 b2 = 5;         % 
 k = 1;          % Learning accelerator (scaling factor)
-nu = 0.0338;         % Learning rate (for the mean)
-nv = 0.0218;         % Learning rate (for the variance
+nu = 0.0338;    % Learning rate (for the mean)
+nv = 0.0218;    % Learning rate (for the variance
 
 % STDP variables
 taupre = 20;       % NOTE ABOUT STDP WITH DATA EXAMPLE:
 taupost = 20;      % This example is somewhat cherry picked, small
-Apre = 0.1;        % changes result in large destabilisations of learning
-Apost = -0.12;     % Something is still wrong.
+Apre = 0;% 0.1;        % changes result in large destabilisations of learning
+Apost = 0; %-0.12;     % Something is still wrong.
 STDPdecaypre = exp(-1/taupre);
 STDPdecaypost = exp(-1/taupost);
 % dApre/post represent the decayed activity of when pre/post synaptic
@@ -87,6 +84,7 @@ ts = [500 520 530 550];
 %% Main computation loop
 for sec = 1 : sim_time_sec
     [ inp, ts, patt_inp, patt_ts ] = embedPat( N_inp, patt_inp, patt_ts );
+    tic;
     ts = ts + (sec-1) * 1000;
     for ms = 1 : ms_per_sec
         time = (sec - 1) * ms_per_sec + ms;  
@@ -95,7 +93,7 @@ for sec = 1 : sim_time_sec
         Iapp = zeros(N, 1);
         t0 = time - last_spike_time;
         t0negu = t0 - delays;
-        scale = 1 ./ (sigma * sqrt(2 * pi));
+        scale = 1 ./ (sigma .* sqrt(2 * pi));
         g = scale .* exp((-1/2) .* ((t0negu) ./ sigma) .^2 );
         g(isnan(g)) = 0;
         gaussian_values = w .* g;
@@ -103,11 +101,8 @@ for sec = 1 : sim_time_sec
         % Collect input for each neuron based on synapses facing them
         [to_neurons, ~, to_neurons_idx] = unique(post);
         Iapp(to_neurons) = accumarray(to_neurons_idx, gaussian_values(:));
-        
+      
         %debug = [debug; mean(w(800, :)), mean(w(801, 1)), mean(w(802, 1))];
-        if time == 2110
-           disp(''); 
-        end
         
         %% An incoming spike arrived at a neuron
         incoming = active_spikes{active_idx}; 
@@ -148,43 +143,44 @@ for sec = 1 : sim_time_sec
             dApost(neuron) = dApost(neuron) + Apost;
             
             % Update SVDL
-            % te is temporal error of any pre-synaptic neurons to this
-            % spike
-            % TODO this can be made more efficient with careful matrix
-            % manipulation rather than using full matrices the whole way
-            % through
-            [presyn_neurons, ~] = ind2sub(size(post), presynaptic_idxs);
-            t0 = time - last_spike_time(presyn_neurons);
-            t0negu = t0 - delays(presynaptic_idxs);
-            abst0negu = abs(t0negu);
-            k = (sigma(presyn_neurons) + 0.9) .^ 2;
-            shifts = sign(t0negu) .* k .* nu;
-            
-            du = zeros(size(presyn_neurons));      % mean shift should be 0
-            % Spike times are REALLY (a2) close,
-            du(t0 >= a2) = -k(t0 >= a2) .* nu;                % unless t0 >= a2
-            % Spike times are kinda (a1) close -> move mean closer
-            du(abst0negu >= a1) = shifts(abst0negu >= a1);       % or |t0 - u| >= a1
-            
-            %TODO - what is the best way to apply du (float) to delays
-            %(int)
-            
-            % Update SDVL variance
-            dv = zeros(size(presyn_neurons));
-            dv(abst0negu < b2) = -k(abst0negu < b2) .* nv;
-            dv(abst0negu >= b1) = k(abst0negu >= b1) .* nv; 
-            
+            if neuron > N_inp
+                [presyn_neurons, ~] = ind2sub(size(post), presynaptic_idxs);
+                t0 = time - last_spike_time(presyn_neurons);
+                t0negu = t0 - delays(presynaptic_idxs);
+                abst0negu = abs(t0negu);
+                k = (sigma(presyn_neurons) + 0.9) .^ 2;
+                shifts = sign(t0negu) .* k .* nu;
 
+                % Update SDVL mean
+                du = zeros(size(presyn_neurons));              % Otherwise
+                du(t0 >= a2) = -k(t0 >= a2) .* nu;             % t0 >= a2
+                du(abst0negu >= a1) = shifts(abst0negu >= a1); % |t0-u| >= a1
+                
+                delays(presynaptic_idxs) = delays(presynaptic_idxs) + du;
+                delays(delays > delay_max) = delay_max;
+                delays(delays < 1) = 1;
+
+                % Update SDVL variance
+                dv = zeros(size(presyn_neurons));               % Otherwise
+                dv(abst0negu < b2) = -k(abst0negu < b2) .* nv;  % |t0-u| < b2
+                dv(abst0negu >= b1) = k(abst0negu >= b1) .* nv; % |t0-u| >= b1
+
+                sigma(presynaptic_idxs) = sigma(presynaptic_idxs) + dv;
+                sigma(sigma > sigma_max) = sigma_max;
+                sigma(sigma < sigma_min) = sigma_min;
+              
+            end
+            
             for connection = 1:num_connections
                 % Keep track of when this spike will arrive at each
                 % postsynaptic neuron and through which connection.
-                delay = delays(connection);
+                delay = round(delays(connection));
                 arrival_offset = mod(active_idx + delay - 1, delay_max) + 1;
                 active_spikes{arrival_offset} = [active_spikes{arrival_offset}; neuron, connection];
             end
         end
         
-        %% Update STDP variables
+        %% Update (decay) STDP variables
         dApre = dApre * STDPdecaypre;
         dApost = dApost * STDPdecaypost;
         active_idx = mod(active_idx, delay_max) + 1;
@@ -222,7 +218,7 @@ for sec = 1 : sim_time_sec
             i = i + 1;
             pos = l2_spike_times(i);
             colour = ax.ColorOrder(l2_spike_idxs(i) - N_inp, :);
-            plot( [pos pos] - offset, get( gca, 'Ylim' ), '--', 'Color', colour, 'LineWidth',2); %, '--', 'MarkerFaceColor', colour, 'MarkerEdgeColor', colour, 'LineWidth',2)
+            plot( [pos pos] - offset, get( gca, 'Ylim' ), '--', 'Color', colour, 'LineWidth',2);
         end
     end
     xlabel('Time (ms)');
@@ -244,6 +240,6 @@ for sec = 1 : sim_time_sec
     spike_arrival_trace = [];
     vt = zeros(N, ms_per_sec);
     vt(:, 1) = v;
-    
+    toc;
     fprintf('Second: %d\n', sec);
 end
