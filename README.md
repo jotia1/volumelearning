@@ -12,12 +12,13 @@ General information about quirks and issues during development can be found in [
 - Demo of Multiple gaussian output synapses [working](https://github.com/jotia1/volumelearning/commit/ba17a45eb05bd605f451f3f4510fb89df9917564)
 - STDP and Synaptic scaling working [demo](https://github.com/jotia1/volumelearning/commit/a4d03ad126d3b05776fe476b21816eaa8e9c9952) (cherry picked parameters)
 
-## Current features
-- [x] Gaussian synapses
+## Todo list
+- [x] Gaussian synapses [1]
 - [x] Multiple outputs
-- [x] STDP
-- [ ] Delay Learning 
-- [ ] Lateral inhibition in output
+- [x] STDP ([all-to-all](http://www.scholarpedia.org/article/Spike-timing_dependent_plasticity#Temporal_all-to-all_versus_nearest-neighbor_spike-interaction))
+- [ ] Delay Learning [1]
+- [ ] Synaptic redistribution rule
+- [ ] convert to auto-encoder setup
 - [ ] Parameter sweep scripts
 - [ ] Event-based data
 - [ ] Party ... wait no, publish
@@ -25,6 +26,10 @@ General information about quirks and issues during development can be found in [
 ## Useful spiking resources
 Additionally I'd like to acknowledge other bits of code that inspired/influenced this implementation as there is a need for more accessible resources around spiking networks (especially those with delays). 
 In particular the [Neural Data Modeling Group's tutorial](http://www.mjrlab.org/2014/05/08/tutorial-how-to-write-a-spiking-neural-network-simulation-in-matlab-from-scratch/) and Izhikevich's [Polychronous code](https://www.izhikevich.org/publications/spnet.htm). [3]
+
+## Notes and comments
+- Unlike [1] and more like [2] the integrals of gaussian synapses are controlled by the weight of the synapse. 
+- There are quirks to the STDP because of time difference between when a neuron fires and when the spike arrives. Default is spike arrival (at post-synaptic neuron) time rather then pre-synaptic spike time, you may want to alter this.
 
 ## References
 [1] P. W. Wright and J. Wiles, “[Learning transmission delays in spiking neural networks: A novel approach to sequence learning based on spike delay variance](https://ieeexplore.ieee.org/document/6252371/)” in The 2012 International Joint Conference on Neural Networks (IJCNN), 2012, pp. 1–8.\

@@ -14,7 +14,7 @@ N_inp = 2000;
 N_out = 3;
 N = N_inp + N_out;
 sim_time_sec = 77;
-delay_max = 1;
+delay_max = 20;
 num_connections = 3;
 w_init = 0.85;
 w_max = 1;
@@ -47,13 +47,14 @@ delays = ceil(rand(N, num_connections) * delay_max);
 last_spike_time = zeros(N, 1) * -Inf;
 
 %% SDVL variables
-a1 = 0;         % Mean lower bound
-a2 = 0;         % Mean upper bound
-b1 = 0;         % Variance lower bound
-b2 = 0;         % Variance upper bound
-k = 0;          % Learning accelerator (scaling factor)
-nu = 0;         % Learning rate (for the mean)
-nv = 0;         % Learning rate (for the variance
+% TODO Initial values taken arbitrarily from (Wright, 2012) paper.
+a1 = 1;         % Move pre towards post time
+a2 = 3;         % Move pre earlier to support post?
+b1 = 8;         % 
+b2 = 5;         % 
+k = 1;          % Learning accelerator (scaling factor)
+nu = 0.0338;         % Learning rate (for the mean)
+nv = 0.0218;         % Learning rate (for the variance
 
 % STDP variables
 taupre = 20;       % NOTE ABOUT STDP WITH DATA EXAMPLE:
@@ -149,8 +150,30 @@ for sec = 1 : sim_time_sec
             % Update SVDL
             % te is temporal error of any pre-synaptic neurons to this
             % spike
+            % TODO this can be made more efficient with careful matrix
+            % manipulation rather than using full matrices the whole way
+            % through
             [presyn_neurons, ~] = ind2sub(size(post), presynaptic_idxs);
-            te = abs(time - last_spike_time(presyn_neurons));
+            t0 = time - last_spike_time(presyn_neurons);
+            t0negu = t0 - delays(presynaptic_idxs);
+            abst0negu = abs(t0negu);
+            k = (sigma(presyn_neurons) + 0.9) .^ 2;
+            shifts = sign(t0negu) .* k .* nu;
+            
+            du = zeros(size(presyn_neurons));      % mean shift should be 0
+            % Spike times are REALLY (a2) close,
+            du(t0 >= a2) = -k(t0 >= a2) .* nu;                % unless t0 >= a2
+            % Spike times are kinda (a1) close -> move mean closer
+            du(abst0negu >= a1) = shifts(abst0negu >= a1);       % or |t0 - u| >= a1
+            
+            %TODO - what is the best way to apply du (float) to delays
+            %(int)
+            
+            % Update SDVL variance
+            dv = zeros(size(presyn_neurons));
+            dv(abst0negu < b2) = -k(abst0negu < b2) .* nv;
+            dv(abst0negu >= b1) = k(abst0negu >= b1) .* nv; 
+            
 
             for connection = 1:num_connections
                 % Keep track of when this spike will arrive at each
