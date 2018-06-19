@@ -12,6 +12,7 @@ General information about quirks and issues during development can be found in [
 - Demo of Multiple gaussian output synapses [working](https://github.com/jotia1/volumelearning/commit/ba17a45eb05bd605f451f3f4510fb89df9917564)
 - STDP and Synaptic scaling working [demo](https://github.com/jotia1/volumelearning/commit/a4d03ad126d3b05776fe476b21816eaa8e9c9952) (cherry picked parameters)
 - SDVL [1] [working (STDP off)](https://github.com/jotia1/volumelearning/commit/4e485993d6e48f614438766e4e54b915c450209a)
+- Event-based data [implemented](https://github.com/jotia1/volumelearning/commit/b20913259869c4b4b72d1bc477d95ddf5d10688e)
 
 ## Todo list
 - [x] Gaussian synapses [1]
@@ -31,7 +32,7 @@ In particular the [Neural Data Modeling Group's tutorial](http://www.mjrlab.org/
 ## Notes and comments
 - Unlike [1] and more like [2] the integrals of gaussian synapses are controlled by the weight of the synapse. 
 - There are quirks to the STDP because of time difference between when a neuron fires and when the spike arrives. Default is spike arrival (at post-synaptic neuron) time rather then pre-synaptic spike time, you may want to alter this.
-- Assumes you have the code from inilabs to load event-based data.
+- Assumes you have the code from inilabs to load event-based data (if using event based data demo).
 
 ## References
 [1] P. W. Wright and J. Wiles, “[Learning transmission delays in spiking neural networks: A novel approach to sequence learning based on spike delay variance](https://ieeexplore.ieee.org/document/6252371/)” in The 2012 International Joint Conference on Neural Networks (IJCNN), 2012, pp. 1–8.\
