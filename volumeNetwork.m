@@ -7,12 +7,12 @@ clear;
 
 % Often tweaked parameters
 N_inp = 16*16;
-N_out = 8;
+N_out = 3;
 N = N_inp + N_out;
 sim_time_sec = 300;
 delay_max = 20;
 num_connections = 3;
-w_init = 100;
+w_init = 25;
 w_max = w_init * 1.5;
 syn_mean_thresh = w_init * 0.75;
 
@@ -33,7 +33,7 @@ w = ones(N, num_connections) * w_init;
 % Synpatic links 
 % Post is who is postsynaptic from a pre. N x M, M is number of connections
 post = randi([N_inp + 1, N], N, num_connections);
-w(N_inp + 1 : end, :) = 0;
+w(N_inp + 1 : end, :) = 0; % Output neurons have no affect when spiking
 
 % Synapse dynamics parameters
 g = zeros(N, 1);
@@ -44,8 +44,6 @@ delays = ceil(rand(N, num_connections) * delay_max);
 last_spike_time = zeros(N, 1) * -Inf;
 
 % SDVL variables
-% TODO - Initial values taken arbitrarily from (Wright, 2012) paper. Find
-% sensible values
 a1 = 1;         % 
 a2 = 3;         % 
 b1 = 8;         % 
@@ -55,10 +53,10 @@ nu = 0.0338;    % Learning rate (for the mean)
 nv = 0.0218;    % Learning rate (for the variance
 
 % STDP variables
-taupre = 20;       % NOTE ABOUT STDP WITH DATA EXAMPLE:
-taupost = 20;      % This example is somewhat cherry picked, small
-Apre = 0;% 0.1;        % changes result in large destabilisations of learning
-Apost = 0; %-0.12;     % Something is still wrong.
+taupre = 20;
+taupost = 20;
+Apre = 0.1;
+Apost = -0.12;
 STDPdecaypre = exp(-1/taupre);
 STDPdecaypost = exp(-1/taupost);
 % dApre/post represent the decayed activity of when pre/post synaptic
@@ -88,6 +86,9 @@ ts = floor(ts /1000);
 %% Main computation loop
 for sec = 1 : sim_time_sec
     %[ inp, ts, patt_inp, patt_ts ] = embedPat( N_inp, patt_inp, patt_ts );
+    if mod(sec+1, 32) == 0  %cheeky shift data to keep training
+        ts = ts + 32*1000;
+    end
     tic;
     %ts = ts + (sec-1) * 1000;
     for ms = 1 : ms_per_sec
@@ -161,8 +162,7 @@ for sec = 1 : sim_time_sec
                 du(abst0negu >= a1) = shifts(abst0negu >= a1); % |t0-u| >= a1
                 
                 delays(presynaptic_idxs) = delays(presynaptic_idxs) + du;
-                delays(delays > delay_max) = delay_max;
-                delays(delays < 1) = 1;
+                delays = max(1, min(delay_max, delays));
 
                 % Update SDVL variance
                 dv = zeros(size(presyn_neurons));               % Otherwise
@@ -170,8 +170,7 @@ for sec = 1 : sim_time_sec
                 dv(abst0negu >= b1) = k(abst0negu >= b1) .* nv; % |t0-u| >= b1
 
                 sigma(presynaptic_idxs) = sigma(presynaptic_idxs) + dv;
-                sigma(sigma > sigma_max) = sigma_max;
-                sigma(sigma < sigma_min) = sigma_min;
+                sigma = max(sigma_min, min(sigma_max, sigma));
               
             end
             
@@ -191,7 +190,6 @@ for sec = 1 : sim_time_sec
         
         %% Apply synaptic scaling (SS) and weight bounding
         w_mean = mean(w(:));
-        % TODO - Only bounds against depression, should also bound above
         if w_mean < syn_mean_thresh
             w = w .* (syn_mean_thresh / w_mean);
         end
@@ -245,5 +243,5 @@ for sec = 1 : sim_time_sec
     vt(:, 1) = v;
     toc;
     fprintf('Second: %d\n', sec);
-    waitforbuttonpress;
+    %waitforbuttonpress;
 end
