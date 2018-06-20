@@ -6,15 +6,15 @@ rand('seed', 1);
 clear;
 
 % Often tweaked parameters
-N_inp = 16*16;
+N_inp = 2000;
 N_out = 3;
 N = N_inp + N_out;
 sim_time_sec = 300;
 delay_max = 20;
 num_connections = 3;
-w_init = 25;
+w_init = 0.65;
 w_max = w_init * 1.5;
-syn_mean_thresh = w_init * 0.75;
+syn_mean_thresh = w_init * 0.65;
 
 assert(w_init > syn_mean_thresh, 'SS will interfere');
 assert(w_init < w_max, 'Careful synaptic scaling will limit weights');
@@ -33,7 +33,6 @@ w = ones(N, num_connections) * w_init;
 % Synpatic links 
 % Post is who is postsynaptic from a pre. N x M, M is number of connections
 post = randi([N_inp + 1, N], N, num_connections);
-w(N_inp + 1 : end, :) = 0; % Output neurons have no affect when spiking
 
 % Synapse dynamics parameters
 g = zeros(N, 1);
@@ -66,6 +65,9 @@ dApost = zeros(N, 1);
 active_spikes = cell(delay_max, 1);  % To track when spikes arrive
 active_idx = 1;
 
+% Synaptic Redistribution variables
+% TODO
+
 % Info logging variables
 %spike_arrival_trace = [];
 spike_times_trace = [];
@@ -74,23 +76,19 @@ vt(:, 1) = v;
 debug = [];
 
 %% DATA
-%inp = [50, 100, 200, 500, 700, 800, 801, 802, 803, 804];
-%ts = [5, 7, 50, 55, 100, 525, 505, 500, 500, 500];
-inp = [800 1003 801 1003];
-ts = [500 520 530 550];
-%[ inp, ts, patt_inp, patt_ts ] = embedPat( N_inp );
-[xs, ys, ts, ps] = loadDVSsegment(16, false, 0);
-inp = sub2ind([16 16], xs, ys);
-ts = floor(ts /1000);
+[ inp, ts, patt_inp, patt_ts ] = embedPat( N_inp );
+% [xs, ys, ts, ps] = loadDVSsegment(16, false, 0);
+% inp = sub2ind([16 16], xs, ys);
+% ts = floor(ts /1000);
 
 %% Main computation loop
 for sec = 1 : sim_time_sec
-    %[ inp, ts, patt_inp, patt_ts ] = embedPat( N_inp, patt_inp, patt_ts );
-    if mod(sec+1, 32) == 0  %cheeky shift data to keep training
-        ts = ts + 32*1000;
-    end
+    [ inp, ts, patt_inp, patt_ts ] = embedPat( N_inp, patt_inp, patt_ts );
+    ts = ts + (sec-1) * 1000;
+%     if mod(sec+1, 32) == 0  %cheeky shift data to keep training
+%         ts = ts + 32*1000;
+%     end
     tic;
-    %ts = ts + (sec-1) * 1000;
     for ms = 1 : ms_per_sec
         time = (sec - 1) * ms_per_sec + ms;  
         
@@ -104,11 +102,10 @@ for sec = 1 : sim_time_sec
         gaussian_values = w .* g;
       
         % Collect input for each neuron based on synapses facing them
-        [to_neurons, ~, to_neurons_idx] = unique(post);
+        % TODO can be optimised with a precalculated array
+        [to_neurons, conn_pre_from, to_neurons_idx] = unique(post);
         Iapp(to_neurons) = accumarray(to_neurons_idx, gaussian_values(:));
-      
-        %debug = [debug; mean(w(800, :)), mean(w(801, 1)), mean(w(802, 1))];
-        
+
         %% An incoming spike arrived at a neuron
         incoming = active_spikes{active_idx}; 
         if ~isempty(incoming)
@@ -149,6 +146,7 @@ for sec = 1 : sim_time_sec
             
             % Update SVDL
             if neuron > N_inp
+                v(N_inp + 1: end, :) = v_reset;
                 [presyn_neurons, ~] = ind2sub(size(post), presynaptic_idxs);
                 t0 = time - last_spike_time(presyn_neurons);
                 t0negu = t0 - delays(presynaptic_idxs);
@@ -189,13 +187,25 @@ for sec = 1 : sim_time_sec
         active_idx = mod(active_idx, delay_max) + 1;
         
         %% Apply synaptic scaling (SS) and weight bounding
+        %output_means = accumarray(to_neurons_idx, w(:), [], @mean);
+        %to_scale = output_means < syn_mean_thresh; 
+        
+        
+        %w(conn_pre_from) = w(conn_pre_from)
+        
+        
+        
+        %debug = [debug; output_means'];
+        
         w_mean = mean(w(:));
+        % TODO this scales weights across ALL outputs not each individually
         if w_mean < syn_mean_thresh
             w = w .* (syn_mean_thresh / w_mean);
         end
         
         % Limit w to between [0, w_max]
-        w(1:N_inp, :) = max(0, min(w_max, w(1:N_inp,:))); 
+        w = max(0, min(w_max, w)); 
+        w(N_inp + 1 : end, :) = 0;
         
     end
     
