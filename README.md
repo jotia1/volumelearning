@@ -13,6 +13,7 @@ General information about quirks and issues during development can be found in [
 - STDP and Synaptic scaling working [demo](https://github.com/jotia1/volumelearning/commit/a4d03ad126d3b05776fe476b21816eaa8e9c9952) (cherry picked parameters)
 - SDVL [1] [working (STDP off)](https://github.com/jotia1/volumelearning/commit/4e485993d6e48f614438766e4e54b915c450209a)
 - Event-based data [implemented](https://github.com/jotia1/volumelearning/commit/b20913259869c4b4b72d1bc477d95ddf5d10688e)
+- Lateral inhibition [demo](https://github.com/jotia1/volumelearning/commit/1b133133da6e11418606fad0128825dba81ef890)
 
 ## Todo list
 - [x] Gaussian synapses [1]

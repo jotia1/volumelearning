@@ -14,7 +14,7 @@ delay_max = 20;
 num_connections = 3;
 w_init = 0.65;
 w_max = w_init * 1.5;
-syn_mean_thresh = w_init * 0.65;
+syn_mean_thresh = w_init * 0.6;
 
 assert(w_init > syn_mean_thresh, 'SS will interfere');
 assert(w_init < w_max, 'Careful synaptic scaling will limit weights');
@@ -187,21 +187,15 @@ for sec = 1 : sim_time_sec
         active_idx = mod(active_idx, delay_max) + 1;
         
         %% Apply synaptic scaling (SS) and weight bounding
-        %output_means = accumarray(to_neurons_idx, w(:), [], @mean);
-        %to_scale = output_means < syn_mean_thresh; 
-        
-        
-        %w(conn_pre_from) = w(conn_pre_from)
-        
-        
-        
-        %debug = [debug; output_means'];
-        
-        w_mean = mean(w(:));
-        % TODO this scales weights across ALL outputs not each individually
-        if w_mean < syn_mean_thresh
-            w = w .* (syn_mean_thresh / w_mean);
+        % accumarray is quite slow, SS takes roughly 20% of compute time
+        output_means = accumarray(to_neurons_idx, w(:), [], @mean);
+        to_scale = output_means < syn_mean_thresh; 
+        if sum(to_scale > 0)  % fairly slow, avoid if possible
+            scaling_factors = to_scale .* (syn_mean_thresh ./ output_means);
+            scaling_factors(scaling_factors == 0) = 1;
+            w = w .* reshape(scaling_factors(to_neurons_idx), size(w));
         end
+        %debug = [debug; output_means', mean(w(:))];
         
         % Limit w to between [0, w_max]
         w = max(0, min(w_max, w)); 
