@@ -1,12 +1,15 @@
 # volumelearning
-Matlab scripts to demonstrate learning spatial and temporal signals in spiking networks. Code is structured around the main file [volumeNetwork](volumeNetwork.m) which can run when invoked with a matlab interpreter.
+Matlab scripts to demonstrate learning spatial and temporal signals in spiking networks. 
+Initial code was based around [volumeNetwork](volumeNetwork.m) which can run when invoked with a matlab interpreter.
+To better implement a synapse redistribution rule the code was restructured into [synRedistNet.m](synRedistNet.m) which is now the main network file to run.
 
-More specificallly this is a two layer network of LIF neurons with gaussian current based, time delayed synapses. 
+More specificallly this is a two layer network of LIF neurons with gaussian current based, time delayed synapses which redistribute. 
 Ideas and inspiration are taken from [1, 2].
 The significance of this particular work (like [1, 2]) is that temporal information is represented explicitly (through connection delays).
 This means the network is actually learning to represent (and predict) spatial (which neurons fire) and temporal (when they fire) information. 
 In contrast models without delays focus on spatial information (which neurons fire roughly together) but focus less on the precise order.
 General information about quirks and issues during development can be found in [this google doc](https://docs.google.com/document/d/1mJY0HtCmyt_8qT5UmYbZxuVqA2B_u3qlE3r0deTQxLY/edit?usp=sharing).
+The synapse redistribution is loosely based around synaptogensis, if a connection is useless it should break and possibly reform somewhere else.
 
 ## Interesting milestones
 - Demo of Multiple gaussian output synapses [working](https://github.com/jotia1/volumelearning/commit/ba17a45eb05bd605f451f3f4510fb89df9917564)
@@ -34,6 +37,7 @@ In particular the [Neural Data Modeling Group's tutorial](http://www.mjrlab.org/
 - Unlike [1] and more like [2] the integrals of gaussian synapses are controlled by the weight of the synapse. 
 - There are quirks to the STDP because of time difference between when a neuron fires and when the spike arrives. Default is spike arrival (at post-synaptic neuron) time rather then pre-synaptic spike time, you may want to alter this.
 - Assumes you have the code from inilabs to load event-based data (if using event based data demo).
+- The switch to synRedistNet.m saw a significant change in network architecture. Connections are now viewed as pre-synaptic to a neuron not post-synaptic. See [this google doc](https://docs.google.com/document/d/1mJY0HtCmyt_8qT5UmYbZxuVqA2B_u3qlE3r0deTQxLY/edit?usp=sharing) for more precise details.
 
 ## References
 [1] P. W. Wright and J. Wiles, “[Learning transmission delays in spiking neural networks: A novel approach to sequence learning based on spike delay variance](https://ieeexplore.ieee.org/document/6252371/)” in The 2012 International Joint Conference on Neural Networks (IJCNN), 2012, pp. 1–8.\
