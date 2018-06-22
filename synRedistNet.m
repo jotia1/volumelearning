@@ -78,6 +78,12 @@ debug = [];
 
 %% Main computation loop
 for sec = 1 : sim_time_sec
+    %% Reset second facilitating variables
+    spike_times_trace = [];
+    spike_arrival_trace = [];
+    vt = zeros(size(vt));
+    vt(:, 1) = v;
+    
     [ inp, ts, patt_inp, patt_ts ] = embedPat( N_inp, patt_inp, patt_ts );
     ts = ts + (sec-1) * 1000;
     tic;
@@ -177,24 +183,24 @@ for sec = 1 : sim_time_sec
         % Limit w to between [0, w_max]
         w = max(0, min(w_max, w)); 
         
-%         % Redistribute weak connections
-%         weak_conns = find(w < 0.05  & delays > 19.5);
-%         delays(weak_conns) = rand(size(weak_conns)) * delay_max;
-%         sigma(weak_conns) = rand(size(weak_conns)) * (sigma_max - sigma_min) + sigma_min;
-%         w(weak_conns) = w_init;
-%         dApre(weak_conns) = 0;
-%         dApost(weak_conns) = 0;
-%         last_spike_time(weak_conns) = -Inf;
-%         
-%         for c = 1 : numel(weak_conns)
-%             conn = weak_conns(c);
-%             old_pre = pre(conn);
-%             post{old_pre}(post{old_pre} == conn) = [];
-%             new_pre = randi([1 N_inp]);
-%             pre(conn) = new_pre;
-%             post{new_pre}(end + 1) = conn;
-%         end
-%         
+        % Redistribute weak connections
+        weak_conns = find(w < 0.05  & delays > 19.5);
+        delays(weak_conns) = rand(size(weak_conns)) * delay_max;
+        sigma(weak_conns) = rand(size(weak_conns)) * (sigma_max - sigma_min) + sigma_min;
+        w(weak_conns) = w_init;
+        dApre(weak_conns) = 0;
+        dApost(weak_conns) = 0;
+        last_spike_time(weak_conns) = -Inf;
+        
+        for c = 1 : numel(weak_conns)
+            conn = weak_conns(c);
+            old_pre = pre(conn);
+            post{old_pre}(post{old_pre} == conn) = [];
+            new_pre = randi([1 N_inp]);
+            pre(conn) = new_pre;
+            post{new_pre}(end + 1) = conn;
+        end
+        
         
         
     end
@@ -227,20 +233,21 @@ for sec = 1 : sim_time_sec
     ylabel('Neuron number');
     
     subplot(2, 1, 2);
-    plot(1:ms_per_sec, vt);
-    title(sprintf('second: %d', sec-1));
-    legend({'Neuron 1', 'Neuron 2', 'Neuron 3'});
-    xlabel('Time (ms)');
-    ylabel('Membrane potential (mV)');
+    hist(pre');
+    legend({'Blue - N1', 'Brown - N2', 'Yellow - N3'});
+    title(sprintf('Synaptic distribution at second: %d', sec-1));
+    xlabel('Pixel number');
+    ylabel('Number of connections from each output in range')
     drawnow;
-    
-    hold off;
-    
-    %% Reset second facilitating variables
-    spike_times_trace = [];
-    spike_arrival_trace = [];
-    vt = zeros(size(vt));
-    vt(:, 1) = v;
+% %     plot(1:ms_per_sec, vt);
+% %     title(sprintf('second: %d', sec-1));
+% %     legend({'Neuron 1', 'Neuron 2', 'Neuron 3'});
+% %     xlabel('Time (ms)');
+% %     ylabel('Membrane potential (mV)');
+% %     drawnow;
+% %     
+%     hold off;
+   
     toc;
     fprintf('Second: %d\n', sec);
 end

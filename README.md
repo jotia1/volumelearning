@@ -17,6 +17,7 @@ The synapse redistribution is loosely based around synaptogensis, if a connectio
 - SDVL [1] [working (STDP off)](https://github.com/jotia1/volumelearning/commit/4e485993d6e48f614438766e4e54b915c450209a)
 - Event-based data [implemented](https://github.com/jotia1/volumelearning/commit/b20913259869c4b4b72d1bc477d95ddf5d10688e)
 - Lateral inhibition [demo](https://github.com/jotia1/volumelearning/commit/1b133133da6e11418606fad0128825dba81ef890)
+- Synaptic redistribution network example
 
 ## Todo list
 - [x] Gaussian synapses [1]
@@ -24,7 +25,7 @@ The synapse redistribution is loosely based around synaptogensis, if a connectio
 - [x] STDP ([all-to-all](http://www.scholarpedia.org/article/Spike-timing_dependent_plasticity#Temporal_all-to-all_versus_nearest-neighbor_spike-interaction))
 - [x] Delay Learning [1]
 - [x] Event-based data
-- [ ] Synaptic redistribution rule
+- [x] Synaptic redistribution rule
 - [ ] convert to auto-encoder setup
 - [ ] Parameter sweep scripts
 - [ ] Party ... wait no, publish
