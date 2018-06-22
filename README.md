@@ -1,7 +1,7 @@
 # volumelearning
 Matlab scripts to demonstrate learning spatial and temporal signals in spiking networks. 
-Initial code was based around [volumeNetwork](volumeNetwork.m) which can run when invoked with a matlab interpreter.
 To better implement a synapse redistribution rule the code was restructured into [synRedistNet.m](synRedistNet.m) which is now the main network file to run.
+Initial code was based around [volumeNetwork](volumeNetwork.m) which can run when invoked with a matlab interpreter.
 
 More specificallly this is a two layer network of LIF neurons with gaussian current based, time delayed synapses which redistribute. 
 Ideas and inspiration are taken from [1, 2].

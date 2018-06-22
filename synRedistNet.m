@@ -5,19 +5,17 @@
 rand('seed', 1);
 clear;
 
-% Often tweaked parameters
 N_inp = 2000;
 N_out = 3;
 N = N_inp + N_out;
-sim_time_sec = 300;  
+layer_sizes = [N_inp, N_out];
+sim_time_sec = 300;
 delay_max = 20;
-num_connections = 50;
-w_init = 0.65*25;
+num_dendrites = 2000;
+connection_matrix_size = [N_out, num_dendrites];
+w_init = 0.65;
 w_max = w_init * 1.5;
-syn_mean_thresh = w_init * 0.6;
-
-assert(w_init > syn_mean_thresh, 'SS will interfere');
-assert(w_init < w_max, 'Careful synaptic scaling will limit weights');
+syn_mean_thresh = 0.6;
 
 % Constants and conversions
 ms_per_sec = 1000;
@@ -27,25 +25,36 @@ v_rest = -65;
 v_reset = -70;
 v_thres = -55;
 neuron_tau = 20;
-v = v_rest * ones(N_out, 1); 
-w = ones(N_out, num_connections) * w_init;
+v = v_rest * ones(N_out, 1);
+w = ones(connection_matrix_size) * w_init;
 
-% Synpatic links 
-% Post is who is postsynaptic from a pre. N x M, M is number of connections
-% pre = cell(N_out, 1);
-% for neuron = 1 : N_out
-%     pre{neuron} = randi([1 N_inp], num_connections, 1);
-% end
-pre = randi([1 N_inp], N_out, num_connections);
-%post = randi([N_inp + 1, N], N, num_connections);
+% Connections
+% pre is which neurons are pre-synaptic and post is which are post-synaptic
+pre = randi([1 N_inp], connection_matrix_size);
+delays = rand(connection_matrix_size) * delay_max;
+last_spike_time = zeros(N, 1) * -Inf;
+post = cell(N_inp, 1);
+for n = 1 : N_inp
+    post{n} = find(pre == n);
+end
 
 % Synapse dynamics parameters
-g = zeros(N, 1);
+g = zeros(size(v));
 sigma_max = 10;
 sigma_min = 0.1;
-sigma = rand(N_out, num_connections) * (sigma_max - sigma_min) + sigma_min;
-delays = ceil(rand(N_out, num_connections) * delay_max);
-last_spike_time = zeros(N, 1) * -Inf;
+sigma = rand(connection_matrix_size) * (sigma_max - sigma_min) + sigma_min;
+
+% STDP variables
+taupre = 20;
+taupost = 20;
+Apre = 0.1;
+Apost = -0.12;
+STDPdecaypre = exp(-1/taupre);
+STDPdecaypost = exp(-1/taupost);
+dApre = zeros(connection_matrix_size);
+dApost = zeros(connection_matrix_size);
+active_spikes = cell(delay_max, 1);  % To track when spikes arrive
+active_idx = 1;
 
 % SDVL variables
 a1 = 1;         % 
@@ -56,168 +65,120 @@ k = 1;          % Learning accelerator (scaling factor)
 nu = 0.0338;    % Learning rate (for the mean)
 nv = 0.0218;    % Learning rate (for the variance
 
-% STDP variables
-taupre = 20;
-taupost = 20;
-Apre = 0.1;
-Apost = -0.12;
-STDPdecaypre = exp(-1/taupre);
-STDPdecaypost = exp(-1/taupost);
-% dApre/post represent the decayed activity of when pre/post synaptic
-% neurons fired. It is the amount to change weights by.
-dApre = zeros(N, num_connections);  % TODO come back and fix STDP sizes
-dApost = zeros(N, 1);
-active_spikes = cell(delay_max, 1);  % To track when spikes arrive
-active_idx = 1;
-
-% Synaptic Redistribution variables
-% TODO
-
-% Info logging variables
-%spike_arrival_trace = [];
+%Logging
 spike_times_trace = [];
-vt = zeros(N_out, ms_per_sec);
+vt = zeros(size(v, 1), ms_per_sec);
 vt(:, 1) = v;
 debug = [];
 
-%% DATA
+%% Data
+%inp = [5, 2002, 5, 2002, 5, 2002, 2002, 2002, 5, 5, 5];
+%ts = [200, 500, 550, 560, 590, 600, 601, 602, 615, 617, 618];
 [ inp, ts, patt_inp, patt_ts ] = embedPat( N_inp );
-% [xs, ys, ts, ps] = loadDVSsegment(16, false, 0);
-% inp = sub2ind([16 16], xs, ys);
-% ts = floor(ts /1000);
 
 %% Main computation loop
 for sec = 1 : sim_time_sec
     [ inp, ts, patt_inp, patt_ts ] = embedPat( N_inp, patt_inp, patt_ts );
     ts = ts + (sec-1) * 1000;
-%     if mod(sec+1, 32) == 0  %cheeky shift data to keep training
-%         ts = ts + 32*1000;
-%     end
     tic;
     for ms = 1 : ms_per_sec
-        time = (sec - 1) * ms_per_sec + ms;  
+        time = (sec - 1) * ms_per_sec + ms;
         
-        %% Calculate input to neurons at this time step
-        Iapp = zeros(N_out, 1);
-        t0 = time - last_spike_time(pre);
-        t0negu = t0 - delays;
+        Iapp = zeros(size(v));
+        t0 = time - reshape(last_spike_time(pre), size(pre));   % conn_matrix_size
+        t0negu = t0 - delays;               % conn_matrix_size
         scale = 1 ./ (sigma .* sqrt(2 * pi));
         g = scale .* exp((-1/2) .* ((t0negu) ./ sigma) .^2 );
         g(isnan(g)) = 0;
         gaussian_values = w .* g;
-      
-        % Collect input for each neuron based on synapses facing them
-        % TODO can be optimised with a precalculated array
-        %[to_neurons, conn_pre_from, to_neurons_idx] = unique(post);
-        %Iapp(to_neurons) = accumarray(to_neurons_idx, gaussian_values(:));
         Iapp = sum(gaussian_values, 2);
         
-        %% An incoming spike arrived at a neuron
+        %% An incoming spike has arrived
         incoming = active_spikes{active_idx}; 
         if ~isempty(incoming)
             active_spikes{active_idx} = [];
-            % incoming(:,1) is pre-syn neuron, incoming(:, 2) is connection
-            incoming_idxs = sub2ind(size(dApre), incoming(:, 1), incoming(:,2));
+            conn_idxs = incoming(:, 2);
             
-            % Update STDP variables
-            dApre(incoming_idxs) = dApre(incoming_idxs) + Apre;
-  
-%             Log spike arrivals for plotting later
-%             spike_arrival_trace = [spike_arrival_trace; 
-%                                    time*ones(length(incoming),1), incoming];
+            dApre(conn_idxs) = dApre(conn_idxs) + Apre;
         end
-
         
         %% Update membrane voltages
         v = v + (v_rest + Iapp - v) / neuron_tau;
         vt(:, ms) = v;
         
         %% Deal with neurons that just spiked
-        fired = [find(v >= v_thres) + N_inp; inp(ts == time)'];
+        fired = [find(v >=v_thres) + N_inp; inp(ts == time)'];
         spike_times_trace = [spike_times_trace; time*ones(length(fired),1), fired];
-        last_spike_time(fired) = time;  % Used in synapse dynamics 
+        last_spike_time(fired) = time;
         
-        for spike = 1 : length(fired)  
-            neuron = fired(spike);
-            if neuron > N_inp
-                v(neuron - N_inp) = v_reset;
-            end
-        end
-        if false     %TODO fix STDP and SDVL
-            % Update STDP variables
-            presynaptic_idxs = find(post == neuron);   
-            % I spiked, reinforce any before me
-            w(presynaptic_idxs) = w(presynaptic_idxs) + dApre(presynaptic_idxs);
-            % weaken connections to any after me who spiked not long ago
-            w(neuron, :) = w(neuron, :) + dApost(post(neuron, :))'; 
+        for spike = 1 : length(fired)
+            neuron_idx = fired(spike);
+            [neuron_layer, neuron_id] = idx2layerid(layer_sizes, neuron_idx);
             
-            dApost(neuron) = dApost(neuron) + Apost;
-            
-            % Update SVDL
-            if neuron > N_inp
-                v(N_inp + 1: end, :) = v_reset;  % Lateral inhibition
-                [presyn_neurons, ~] = ind2sub(size(post), presynaptic_idxs);
-                t0 = time - last_spike_time(presyn_neurons);
-                t0negu = t0 - delays(presynaptic_idxs);
+            if neuron_layer ~= 1  %Output neuron
+                v(neuron_id) = v_reset; % No lateral inhibition
+                %v(:) = v_reset; % Lateral inhibition
+                w(neuron_id, :) = w(neuron_id, :) + dApre(neuron_id, :);
+                dApost(neuron_id, :) = dApost(neuron_id, :) + Apost;
+                
+                % Update SDVL
+                presyn_idxs = pre(neuron_id, :);
+                t0 = time - reshape(last_spike_time(presyn_idxs), size(presyn_idxs));
+                t0negu = t0 - delays(presyn_idxs);
                 abst0negu = abs(t0negu);
-                k = (sigma(presyn_neurons) + 0.9) .^ 2;
+                k = (sigma(presyn_idxs) + 0.9) .^ 2;
                 shifts = sign(t0negu) .* k .* nu;
-
+                
                 % Update SDVL mean
-                du = zeros(size(presyn_neurons));              % Otherwise
+                du = zeros(size(presyn_idxs));              % Otherwise
                 du(t0 >= a2) = -k(t0 >= a2) .* nu;             % t0 >= a2
                 du(abst0negu >= a1) = shifts(abst0negu >= a1); % |t0-u| >= a1
                 
-                delays(presynaptic_idxs) = delays(presynaptic_idxs) + du;
+                delays(presyn_idxs) = delays(presyn_idxs) + du;
                 delays = max(1, min(delay_max, delays));
-
+                
                 % Update SDVL variance
-                dv = zeros(size(presyn_neurons));               % Otherwise
+                dv = zeros(size(presyn_idxs));               % Otherwise
                 dv(abst0negu < b2) = -k(abst0negu < b2) .* nv;  % |t0-u| < b2
                 dv(abst0negu >= b1) = k(abst0negu >= b1) .* nv; % |t0-u| >= b1
 
-                sigma(presynaptic_idxs) = sigma(presynaptic_idxs) + dv;
+                sigma(presyn_idxs) = sigma(presyn_idxs) + dv;
                 sigma = max(sigma_min, min(sigma_max, sigma));
-              
-            end
-            
-            for connection = 1:num_connections
-                % Keep track of when this spike will arrive at each
-                % postsynaptic neuron and through which connection.
-                delay = round(delays(connection));
-                arrival_offset = mod(active_idx + delay - 1, delay_max) + 1;
-                active_spikes{arrival_offset} = [active_spikes{arrival_offset}; neuron, connection];
+                
+            else  % First layer (input)
+                conn_idxs = post{neuron_idx};
+                w(conn_idxs) = w(conn_idxs) + dApost(conn_idxs);
+                
+                paths = post{neuron_id};
+                for path = 1 : numel(paths)
+                    % Keep track of when this spike will arrive at each
+                    % postsynaptic neuron and through which connection.
+                    conn_idx = paths(path);
+                    delay = round(delays(conn_idx));
+                    arrival_offset = mod(active_idx + delay - 1, delay_max) + 1;
+                    active_spikes{arrival_offset} = [active_spikes{arrival_offset}; neuron_id, conn_idx];
+                end
             end
         end
-        
+
         %% Update (decay) STDP variables
         dApre = dApre * STDPdecaypre;
         dApost = dApost * STDPdecaypost;
         active_idx = mod(active_idx, delay_max) + 1;
         
-        %% Apply synaptic scaling (SS) and weight bounding
-        % accumarray is quite slow, SS takes roughly 20% of compute time
-%         output_means = accumarray(to_neurons_idx, w(:), [], @mean);
-%         to_scale = output_means < syn_mean_thresh; 
-%         if sum(to_scale > 0)  % fairly slow, avoid if possible
-%             scaling_factors = to_scale .* (syn_mean_thresh ./ output_means);
-%             scaling_factors(scaling_factors == 0) = 1;
-%             w = w .* reshape(scaling_factors(to_neurons_idx), size(w));
-%         end
-        %debug = [debug; output_means', mean(w(:))];
-        
         % Synaptic scaling
         means = mean(w, 2);
         to_scale = means < syn_mean_thresh;
-        w(to_scale, :) = w(to_scale, :) .* (syn_mean_thresh ./ means(to_scale));
+        if sum(to_scale) > 0
+            w(to_scale, :) = w(to_scale, :) .* (syn_mean_thresh ./ means(to_scale));
+        end 
+        %debug = [debug; means(:)'];
         
         % Limit w to between [0, w_max]
         w = max(0, min(w_max, w)); 
-        %w(N_inp + 1 : end, :) = 0;
-        
     end
     
-    %% Plot results from this second of processing
+    %% Plot results from this second of processing     
     clf
     subplot(2, 1, 1);
     offset = (sec - 1) * 1000;
@@ -240,12 +201,12 @@ for sec = 1 : sim_time_sec
         colour = ax.ColorOrder(c_idx, :);
         plot( [pos pos] - offset, get( gca, 'Ylim' ), '--', 'Color', colour, 'LineWidth',2);
     end
+    axis([0, 1000, 0 N]);
     xlabel('Time (ms)');
     ylabel('Neuron number');
     
-    
     subplot(2, 1, 2);
-    plot(1:ms_per_sec, vt');
+    plot(1:ms_per_sec, vt);
     title(sprintf('second: %d', sec-1));
     legend({'Neuron 1', 'Neuron 2', 'Neuron 3'});
     xlabel('Time (ms)');
@@ -257,9 +218,8 @@ for sec = 1 : sim_time_sec
     %% Reset second facilitating variables
     spike_times_trace = [];
     spike_arrival_trace = [];
-    vt = zeros(N_out, ms_per_sec);
+    vt = zeros(size(vt));
     vt(:, 1) = v;
     toc;
     fprintf('Second: %d\n', sec);
-    %waitforbuttonpress;
 end
