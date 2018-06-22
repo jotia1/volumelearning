@@ -11,9 +11,9 @@ N = N_inp + N_out;
 layer_sizes = [N_inp, N_out];
 sim_time_sec = 300;
 delay_max = 20;
-num_dendrites = 2000;
+num_dendrites = 500;
 connection_matrix_size = [N_out, num_dendrites];
-w_init = 0.65;
+w_init = 0.65*4;
 w_max = w_init * 1.5;
 syn_mean_thresh = 0.6;
 
@@ -123,10 +123,10 @@ for sec = 1 : sim_time_sec
                 
                 % Update SDVL
                 presyn_idxs = pre(neuron_id, :);
-                t0 = time - reshape(last_spike_time(presyn_idxs), size(presyn_idxs));
-                t0negu = t0 - delays(presyn_idxs);
+                t0 = time - last_spike_time(presyn_idxs)';
+                t0negu = t0 - delays(neuron_id, :);
                 abst0negu = abs(t0negu);
-                k = (sigma(presyn_idxs) + 0.9) .^ 2;
+                k = (sigma(neuron_id, :) + 0.9) .^ 2;
                 shifts = sign(t0negu) .* k .* nu;
                 
                 % Update SDVL mean
@@ -134,7 +134,7 @@ for sec = 1 : sim_time_sec
                 du(t0 >= a2) = -k(t0 >= a2) .* nu;             % t0 >= a2
                 du(abst0negu >= a1) = shifts(abst0negu >= a1); % |t0-u| >= a1
                 
-                delays(presyn_idxs) = delays(presyn_idxs) + du;
+                delays(neuron_id, :) = delays(neuron_id, :) + du;
                 delays = max(1, min(delay_max, delays));
                 
                 % Update SDVL variance
@@ -142,7 +142,7 @@ for sec = 1 : sim_time_sec
                 dv(abst0negu < b2) = -k(abst0negu < b2) .* nv;  % |t0-u| < b2
                 dv(abst0negu >= b1) = k(abst0negu >= b1) .* nv; % |t0-u| >= b1
 
-                sigma(presyn_idxs) = sigma(presyn_idxs) + dv;
+                sigma(neuron_id, :) = sigma(neuron_id, :) + dv;
                 sigma = max(sigma_min, min(sigma_max, sigma));
                 
             else  % First layer (input)
@@ -173,9 +173,30 @@ for sec = 1 : sim_time_sec
             w(to_scale, :) = w(to_scale, :) .* (syn_mean_thresh ./ means(to_scale));
         end 
         %debug = [debug; means(:)'];
-        
+
         % Limit w to between [0, w_max]
         w = max(0, min(w_max, w)); 
+        
+%         % Redistribute weak connections
+%         weak_conns = find(w < 0.05  & delays > 19.5);
+%         delays(weak_conns) = rand(size(weak_conns)) * delay_max;
+%         sigma(weak_conns) = rand(size(weak_conns)) * (sigma_max - sigma_min) + sigma_min;
+%         w(weak_conns) = w_init;
+%         dApre(weak_conns) = 0;
+%         dApost(weak_conns) = 0;
+%         last_spike_time(weak_conns) = -Inf;
+%         
+%         for c = 1 : numel(weak_conns)
+%             conn = weak_conns(c);
+%             old_pre = pre(conn);
+%             post{old_pre}(post{old_pre} == conn) = [];
+%             new_pre = randi([1 N_inp]);
+%             pre(conn) = new_pre;
+%             post{new_pre}(end + 1) = conn;
+%         end
+%         
+        
+        
     end
     
     %% Plot results from this second of processing     
