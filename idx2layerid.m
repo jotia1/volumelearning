@@ -11,6 +11,11 @@ function [ layer_num, n_id ] = idx2layerid( l_sizes, n )
         n_id = n - l_sizes(1);
     end
     
+    if n > l_sizes(2) + l_sizes(1)
+        layer_num = 3;
+        n_id = n - l_sizes(1) - l_sizes(2);
+    end
+    
     
 %     layer_num = 1;
 %     n_id = n;
