@@ -32,7 +32,11 @@ nps = [];
 
 
 % % 32x32 dots crossing
-if size == 32
+if size == 128
+    xloc = floor(((190 - 128) / 2) + 50);
+    yloc = floor(((180 - 128) / 2));
+    nsize = 128;
+elseif size == 32
     xloc = 105;
     yloc = 95;
     nsize = 32;
@@ -92,7 +96,20 @@ ys = nys(1:eidx) - (yloc - 1);               % Same here
 ts = nts(1:eidx) - nts(1);
 
 %% Clean hot pixels
-if nsize == 32
+if nsize == 128
+    idxs = [find(xs == 59 & ys == 104), ...
+        find(xs == 101 & ys == 62), ...
+        find(xs == 104 & ys == 5), ...
+        find(xs == 34 & ys == 77), ...
+        find(xs == 60 & ys == 18), ...
+        find(xs == 2 & ys == 6), ...
+        find(xs == 67 & ys == 50), ...
+        find(xs == 44 & ys == 74)];
+    xs(idxs) = [];
+    ys(idxs) = [];
+    ts(idxs) = [];
+    
+elseif nsize == 32
     idxs = [find(xs == 20 & ys == 5), find(xs == 10 & ys == 8)];
     xs(idxs) = [];
     ys(idxs) = [];
@@ -112,7 +129,7 @@ if do_plot
 
     figure
     pts = linspace(0, nsize, nsize);
-    N = histcounts2(ys(:), xs(:), pts, pts);
+    N = histcounts2(ys(:), xs(:), 0:nsize+1, 0:nsize+1 );
     imagesc(pts, pts, N);
     axis equal;
     set(gca, 'XLim', pts([1 end]), 'YLim', pts([1 end]), 'YDir', 'normal');

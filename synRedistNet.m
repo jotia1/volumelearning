@@ -5,21 +5,23 @@
 rand('seed', 1);
 clear;
 
-N_inp = 2000;
-N_hid = 3;
+N_inp = 128*128;
+N_hid = 7;
 N_out = N_inp;
 N = N_inp + N_hid + N_out;
 N_v = N_hid + N_out;
 layer_sizes = [N_inp, N_hid, N_out];
-sim_time_sec = 300;
+sim_time_sec = 60 * 20;
 delay_max = 20;
-num_dendrites = 500;
+num_dendrites = 2000;
 num_axons = 300;
 hid_conn_matrix_size = [N_hid, num_dendrites];
 out_conn_matrix_size = [N_hid, num_axons];
-w_init = 0.65*5;
+scaling_factor = 25;
+w_init = 0.65 * scaling_factor;
 w_max = w_init * 1.5;
-syn_mean_thresh = 0.6;
+syn_mean_thresh = w_init * 0.8;
+plot_every = 5;
 
 % Constants and conversions
 ms_per_sec = 1000;
@@ -68,8 +70,8 @@ variance_out = rand(out_conn_matrix_size) * (variance_max - variance_min) + vari
 % STDP variables
 taupre = 20;
 taupost = 20;
-Apre = 0.1;
-Apost = -0.12;
+Apre = 0.1 * scaling_factor;
+Apost = -0.12 * scaling_factor;
 STDPdecaypre = exp(-1/taupre);
 STDPdecaypost = exp(-1/taupost);
 dApre_hid = zeros(hid_conn_matrix_size);
@@ -97,7 +99,12 @@ debug = [];
 %% Data
 %inp = [5, 2002, 5, 2002, 5, 2002, 2002, 2002, 5, 5, 5];
 %ts = [200, 500, 550, 560, 590, 600, 601, 602, 615, 617, 618];
-[ inp, ts, patt_inp, patt_ts ] = embedPat( N_inp );
+%[ inp, ts, patt_inp, patt_ts ] = embedPat( N_inp );
+
+% DVS data
+[xs, ys, ts, ps] = loadDVSsegment(128, false, 0);
+inp = sub2ind([128 128], xs, ys);
+ts = floor(ts /1000);
 
 %% Main computation loop
 for sec = 1 : sim_time_sec
@@ -107,8 +114,11 @@ for sec = 1 : sim_time_sec
     vt = zeros(size(vt));
     vt(:, 1) = v;
     
-    [ inp, ts, patt_inp, patt_ts ] = embedPat( N_inp, patt_inp, patt_ts );
-    ts = ts + (sec-1) * 1000;
+    %[ inp, ts, patt_inp, patt_ts ] = embedPat( N_inp, patt_inp, patt_ts );
+    %ts = ts + (sec-1) * 1000;
+    if mod(sec+1, 30) == 0  %cheeky shift data to keep training
+         ts = ts + 30*1000;
+     end
     tic;
     for ms = 1 : ms_per_sec
         time = (sec - 1) * ms_per_sec + ms;
@@ -136,9 +146,9 @@ for sec = 1 : sim_time_sec
         [to_neurons, conn_pre_from, to_neurons_idx] = unique(active_conns);  %TODO fix
         Iapp(to_neurons + N_hid) = accumarray(to_neurons_idx, gaussian_values_out(:));
         
-        if time > 500
-           disp('')
-        end
+%         if time > 500
+%            disp('')
+%         end
                 
         %% An incoming spike has arrived
         incoming = active_spikes{active_idx}; 
@@ -170,8 +180,8 @@ for sec = 1 : sim_time_sec
                 %v(neuron_id) = v_reset; % No lateral inhibition
             
             elseif neuron_layer == 2  %hid neuron
-                v(neuron_id) = v_reset; % No lateral inhibition
-                %v(:) = v_reset; % Lateral inhibition
+                %v(neuron_id) = v_reset; % No lateral inhibition
+                v(1:N_hid) = v_reset; % Lateral inhibition
                 w_hid(neuron_id, :) = w_hid(neuron_id, :) + dApre_hid(neuron_id, :);
                 dApost_hid(neuron_id, :) = dApost_hid(neuron_id, :) + Apost;
                 
@@ -232,7 +242,7 @@ for sec = 1 : sim_time_sec
         w_hid = max(0, min(w_max, w_hid)); 
         
         % Redistribute weak connections
-        weak_conns = find(w_hid < 0.05  & delays_hid > 19.5);
+        weak_conns = find(w_hid < 5);%  & delays_hid > 19.5);
         delays_hid(weak_conns) = rand(size(weak_conns)) * delay_max;
         variance_hid(weak_conns) = rand(size(weak_conns)) * (variance_max - variance_min) + variance_min;
         w_hid(weak_conns) = w_init;
@@ -251,51 +261,69 @@ for sec = 1 : sim_time_sec
         
     end
     
-    %% Plot results from this second of processing     
-    clf
-    subplot(2, 1, 1);
-    offset = (sec - 1) * 1000;
-    filter = find(spike_times_trace(:,2) <= N_inp + N_hid & spike_times_trace(:,2) > N_inp & spike_times_trace(:,1) > offset);
-    l2_spike_idxs = spike_times_trace(filter, 2);
-    l2_spike_times = spike_times_trace(filter, 1);
-    filter = find(spike_times_trace(:,2) < N_inp + N_hid & spike_times_trace(:, 1) > offset);
-    l1_idxs = spike_times_trace(filter, 2);
-    l1_times = spike_times_trace(filter, 1);
-    % Note this is the SPIKE TIME (not arrival time)
-    plot(l1_times - offset, l1_idxs, '.k', 'MarkerSize', 8);
-    hold on 
-    plot(l2_spike_times - offset, l2_spike_idxs, '.r', 'MarkerSize', 8)
-    ax = gca;
-    i = 0;
-    axis([0, 1000, -200 N_v + 50]);
-    while i < numel(l2_spike_times)
-        i = i + 1;
-        pos = l2_spike_times(i);
-        c_idx = mod(l2_spike_idxs(i) - N_inp - 1, size(ax.ColorOrder, 1)) + 1;
-        colour = ax.ColorOrder(c_idx, :);
-        plot( [pos pos] - offset, get( gca, 'Ylim' ), '--', 'Color', colour, 'LineWidth',2);
+    %% Plot results from this second of processing
+    if mod(sec, plot_every) == 0
+        %clf
+        subplot(2, 2, 1);
+        hold off
+        offset = (sec - 1) * 1000;
+        filter = find(spike_times_trace(:,2) <= N_inp + N_hid & spike_times_trace(:,2) > N_inp & spike_times_trace(:,1) > offset);
+        l2_spike_idxs = spike_times_trace(filter, 2);
+        l2_spike_times = spike_times_trace(filter, 1);
+        filter = find(spike_times_trace(:,2) < N_inp + N_hid & spike_times_trace(:, 1) > offset);
+        l1_idxs = spike_times_trace(filter, 2);
+        l1_times = spike_times_trace(filter, 1);
+        % Note this is the SPIKE TIME (not arrival time)
+        plot(l1_times - offset, l1_idxs, '.k', 'MarkerSize', 8);
+        hold on 
+        plot(l2_spike_times - offset, l2_spike_idxs, '.r', 'MarkerSize', 8)
+        ax = gca;
+        i = 0;
+        axis([0, 1000, -200 N_v + 50]);
+        while i < numel(l2_spike_times)
+            i = i + 1;
+            pos = l2_spike_times(i);
+            c_idx = mod(l2_spike_idxs(i) - N_inp - 1, size(ax.ColorOrder, 1)) + 1;
+            colour = ax.ColorOrder(c_idx, :);
+            plot( [pos pos] - offset, get( gca, 'Ylim' ), '--', 'Color', colour, 'LineWidth',2);
+        end
+
+        xlabel('Time (ms)');
+        ylabel('Neuron number');
+
+        subplot(4, 2, 5);
+        hist(pre_hid');
+        legend({'Blue - N1', 'Brown - N2', 'Yellow - N3'});
+        title(sprintf('Synaptic distribution at second: %d', sec-1));
+        xlabel('Pixel number');
+        ylabel('Number of connections from each output in range')
+        drawnow;
+        
+        subplot(4, 2, 2)
+        hist(w_hid');
+        title('weights\_hid');
+        
+        subplot(4, 2, 4);
+        hist(delays_hid');
+        title('delays\_hid');
+        
+        subplot(4, 2, 6);
+        hist(variance_hid');
+        title('variance\_hid')
+        
+        drawnow;
+        
+        subplot(4, 2, 7);
+        plot(1:ms_per_sec, vt(1:N_hid,:));
+        title(sprintf('second: %d', sec-1));
+        legend({'Neuron 1', 'Neuron 2', 'Neuron 3'});
+        xlabel('Time (ms)');
+        ylabel('Membrane potential (mV)');
+        hold off;
+        drawnow;
+        
+        %waitforbuttonpress;
     end
-    
-    xlabel('Time (ms)');
-    ylabel('Neuron number');
-    
-    subplot(2, 1, 2);
-    hist(pre_hid');
-    legend({'Blue - N1', 'Brown - N2', 'Yellow - N3'});
-    title(sprintf('Synaptic distribution at second: %d', sec-1));
-    xlabel('Pixel number');
-    ylabel('Number of connections from each output in range')
-    drawnow;
-    
-%     subplot(2, 1, 2);
-%     plot(1:ms_per_sec, vt(4:end,:));
-%     title(sprintf('second: %d', sec-1));
-%     legend({'Neuron 1', 'Neuron 2', 'Neuron 3'});
-%     xlabel('Time (ms)');
-%     ylabel('Membrane potential (mV)');
-%     hold off;
-%     drawnow;
-   
    
     toc;
     fprintf('Second: %d\n', sec);

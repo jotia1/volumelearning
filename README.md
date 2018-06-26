@@ -18,6 +18,7 @@ The synapse redistribution is loosely based around synaptogensis, if a connectio
 - Event-based data [implemented](https://github.com/jotia1/volumelearning/commit/b20913259869c4b4b72d1bc477d95ddf5d10688e)
 - Lateral inhibition [demo](https://github.com/jotia1/volumelearning/commit/1b133133da6e11418606fad0128825dba81ef890)
 - Synaptic redistribution network [example](https://github.com/jotia1/volumelearning/commit/633f98e995410d1023ba54e7e28feec06464da6a)
+- Autoencoder now (functional)[] for DVS sized data (no plasticity in axons)
 
 ## Todo list
 - [x] Gaussian synapses [1]
@@ -26,7 +27,7 @@ The synapse redistribution is loosely based around synaptogensis, if a connectio
 - [x] Delay Learning [1]
 - [x] Event-based data
 - [x] Synaptic redistribution rule
-- [ ] convert to auto-encoder setup
+- [x] convert to auto-encoder setup
 - [ ] Parameter sweep scripts
 - [ ] Party ... wait no, publish
 
@@ -39,6 +40,7 @@ In particular the [Neural Data Modeling Group's tutorial](http://www.mjrlab.org/
 - There are quirks to the STDP because of time difference between when a neuron fires and when the spike arrives. Default is spike arrival (at post-synaptic neuron) time rather then pre-synaptic spike time, you may want to alter this.
 - Assumes you have the code from inilabs to load event-based data (if using event based data demo).
 - The switch to synRedistNet.m saw a significant change in network architecture. Connections are now viewed as pre-synaptic to a neuron not post-synaptic. See [this google doc](https://docs.google.com/document/d/1mJY0HtCmyt_8qT5UmYbZxuVqA2B_u3qlE3r0deTQxLY/edit?usp=sharing) for more precise details.
+- Initial commits around the autoencoder do not have any plasticity in the second layer. 
 
 ## References
 [1] P. W. Wright and J. Wiles, “[Learning transmission delays in spiking neural networks: A novel approach to sequence learning based on spike delay variance](https://ieeexplore.ieee.org/document/6252371/)” in The 2012 International Joint Conference on Neural Networks (IJCNN), 2012, pp. 1–8.\
