@@ -2,11 +2,17 @@
 % Based around the idea that temporal information plays a critical role in
 % learning real world signals this network models conduction delays between
 % neurons and will form synapses essentially sampling for useful places. 
+
+% Note on terminology: neuron_idx refers to the neurons index globally and
+% each neuron has a unique index which is sequentially assigned. neuron_id
+% refers to the neurons sequential index within its layer and thus several
+% neurons may have the same id (and be from different layers) but all have
+% unique index's. 
 rand('seed', 1);
 clear;
 
 N_inp = 128*128;
-N_hid = 128;
+N_hid = 3;
 N_out = N_inp;
 N = N_inp + N_hid + N_out;
 N_v = N_hid + N_out;
@@ -21,7 +27,7 @@ scaling_factor = 25;
 w_init = 0.65 * scaling_factor;
 w_max = w_init * 1.5;
 syn_mean_thresh = w_init * 0.8;
-plot_every = 100;
+plot_every = 1;
 
 % Constants and conversions
 ms_per_sec = 1000;
@@ -48,7 +54,13 @@ end
 %pre_out = randi([1 N_hid] + N_inp, out_conn_matrix_size);
 delays_out = rand(out_conn_matrix_size) * delay_max;
 post_out = randi([N_inp + N_hid + 1, N], out_conn_matrix_size);
-pre_out = repmat([1:N_out]', 1, num_axons) + N_inp + N_hid; 
+pre_out = cell(N_out, 1);
+for n = 1 : N_out
+    n_idx = n + N_hid + N_inp;
+    [layers, ids] = ind2sub(size(post_out), find(post_out == n_idx));
+    pre_out{n} = layers;
+end
+%pre_out = repmat([1:N_out]', 1, num_axons) + N_inp + N_hid; 
 % post_out = cell(N_hid, 1);
 % for n = 1 : N_hid
 %     post_out{n} = find(pre_out == n);
@@ -150,13 +162,15 @@ for sec = 1 : sim_time_sec
 %            disp('')
 %         end
                 
-        %% An incoming spike has arrived
+        %% A spike has arrived
         incoming = active_spikes{active_idx}; 
         if ~isempty(incoming)
             active_spikes{active_idx} = [];
-            conn_idxs = incoming(:, 2);
+            inp_idxs = incoming(incoming(:,1) <= N_inp, 2);
+            dApre_hid(inp_idxs) = dApre_hid(inp_idxs) + Apre;
             
-            dApre_hid(conn_idxs) = dApre_hid(conn_idxs) + Apre;
+            %out_idxs = incoming(incoming(:,1) > N_inp, 2);
+            %dApre_out(out_idxs) = dApre_out(out_idxs) + Apre;
         end
         
         %% Update membrane voltages
@@ -172,16 +186,23 @@ for sec = 1 : sim_time_sec
             neuron_idx = fired(spike);
             [neuron_layer, neuron_id] = idx2layerid(layer_sizes, neuron_idx);
             
-            if neuron_layer ~= 1 % Anything thats not input
+            if neuron_layer ~= 3 % Anything thats not input
                 
             end
             
             if neuron_layer == 3 % output layer
                 %v(neuron_id) = v_reset; % No lateral inhibition
+                % TODO - Split into hid and out
+                pre_idxs = find(post_out == n_idx);
+                
+                % Update STDP
+                w_out(pre_idxs) = w_out(pre_idxs) + dApre_out(pre_idxs);
+                dApost_out(pre_idxs) = dApost_out(pre_idxs) + Apost;
+                
             
             elseif neuron_layer == 2  %hid neuron
-                %v(neuron_id) = v_reset; % No lateral inhibition
-                v(1:N_hid) = v_reset; % Lateral inhibition
+                v(neuron_id) = v_reset; % No lateral inhibition
+                %v(1:N_hid) = v_reset; % Lateral inhibition
                 w_hid(neuron_id, :) = w_hid(neuron_id, :) + dApre_hid(neuron_id, :);
                 dApost_hid(neuron_id, :) = dApost_hid(neuron_id, :) + Apost;
                 
@@ -209,6 +230,18 @@ for sec = 1 : sim_time_sec
                 variance_hid(neuron_id, :) = variance_hid(neuron_id, :) + dv;
                 variance_hid = max(variance_min, min(variance_max, variance_hid));
                 
+                % I spiked, penalise any post-synaptics that have spikes
+                % just before this
+                w_out(neuron_id, :) = w_out(neuron_id, :) + dApost_out(neuron_id, :);
+                
+                for d = 1 : delay_max
+                    % TODO up to here, was selecting all connections with a
+                    % given delay and then would append them all to
+                    % acitve_spikes to arrive later. 
+                    conn_delays = delays_out(neuron_id, delays_out(neuron_id, :) == d);
+                    arrival_offset = mod(active_idx + delay - 1, delay_max) + 1;
+                end
+                
             else  % First layer (input)
                 conn_idxs = post_hid{neuron_idx};
                 w_hid(conn_idxs) = w_hid(conn_idxs) + dApost_hid(conn_idxs);
@@ -220,7 +253,7 @@ for sec = 1 : sim_time_sec
                     conn_idx = paths(path);
                     delay = round(delays_hid(conn_idx));
                     arrival_offset = mod(active_idx + delay - 1, delay_max) + 1;
-                    active_spikes{arrival_offset} = [active_spikes{arrival_offset}; neuron_id, conn_idx];
+                    active_spikes{arrival_offset} = [active_spikes{arrival_offset}; neuron_idx, conn_idx];
                 end
             end
         end
@@ -228,6 +261,8 @@ for sec = 1 : sim_time_sec
         %% Update (decay) STDP variables
         dApre_hid = dApre_hid * STDPdecaypre;
         dApost_hid = dApost_hid * STDPdecaypost;
+        dApre_out = dApre_out * STDPdecaypre;
+        dApost_out = dApost_out * STDPdecaypost;
         active_idx = mod(active_idx, delay_max) + 1;
         
         % Synaptic scaling
@@ -236,12 +271,14 @@ for sec = 1 : sim_time_sec
         if sum(to_scale) > 0
             w_hid(to_scale, :) = w_hid(to_scale, :) .* (syn_mean_thresh ./ means(to_scale));
         end 
+        % TODO - Synaptic scaling for output connections??
         %debug = [debug; means(:)'];
 
         % Limit w to between [0, w_max]
         w_hid = max(0, min(w_max, w_hid)); 
         
         % Redistribute weak connections
+        % TODO - add in redistribution for output
         weak_conns = find(w_hid < 5);%  & delays_hid > 19.5);
         delays_hid(weak_conns) = rand(size(weak_conns)) * delay_max;
         variance_hid(weak_conns) = rand(size(weak_conns)) * (variance_max - variance_min) + variance_min;
