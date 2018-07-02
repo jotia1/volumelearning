@@ -6,7 +6,7 @@ rand('seed', 1);
 clear;
 
 N_inp = 128*128;
-N_hid = 7;
+N_hid = 128;
 N_out = N_inp;
 N = N_inp + N_hid + N_out;
 N_v = N_hid + N_out;
@@ -21,7 +21,7 @@ scaling_factor = 25;
 w_init = 0.65 * scaling_factor;
 w_max = w_init * 1.5;
 syn_mean_thresh = w_init * 0.8;
-plot_every = 5;
+plot_every = 100;
 
 % Constants and conversions
 ms_per_sec = 1000;
@@ -47,7 +47,7 @@ end
 % output connections
 %pre_out = randi([1 N_hid] + N_inp, out_conn_matrix_size);
 delays_out = rand(out_conn_matrix_size) * delay_max;
-post_out = randi([N_inp + N_hid, N], out_conn_matrix_size);
+post_out = randi([N_inp + N_hid + 1, N], out_conn_matrix_size);
 pre_out = repmat([1:N_out]', 1, num_axons) + N_inp + N_hid; 
 % post_out = cell(N_hid, 1);
 % for n = 1 : N_hid
