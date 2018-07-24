@@ -9,7 +9,9 @@ function [xs, ys, ts, ps] = loadDVSsegment(size, do_plot, eidx)
 addpath('../AedatTools/Matlab/');
 
 aedat = struct;
-aedat.importParams.filePath = '../data/lots_dots.aedat';
+%aedat.importParams.filePath = '../data/lots_dots.aedat';
+%aedat.importParams.filePath = '../data/animal_farm.aedat';
+aedat.importParams.filePath = '../data/moving_day.aedat';
 
 aedat = ImportAedat(aedat);
 %PlotAedat(aedat,5, 'time')
@@ -96,7 +98,7 @@ ys = nys(1:eidx) - (yloc - 1);               % Same here
 ts = nts(1:eidx) - nts(1);
 
 %% Clean hot pixels
-if nsize == 128
+if nsize == 128 && aedat.importParams.filePath(9) == 'l'
     idxs = [find(xs == 59 & ys == 104), ...
         find(xs == 101 & ys == 62), ...
         find(xs == 104 & ys == 5), ...
@@ -109,7 +111,7 @@ if nsize == 128
     ys(idxs) = [];
     ts(idxs) = [];
     
-elseif nsize == 32
+elseif nsize == 32 && aedat.importParams.filePath(9) == 'l'
     idxs = [find(xs == 20 & ys == 5), find(xs == 10 & ys == 8)];
     xs(idxs) = [];
     ys(idxs) = [];
@@ -135,6 +137,6 @@ if do_plot
     set(gca, 'XLim', pts([1 end]), 'YLim', pts([1 end]), 'YDir', 'normal');
     colorbar
 end
-
+disp(['Loaded: ', aedat.importParams.filePath]);
 end
 

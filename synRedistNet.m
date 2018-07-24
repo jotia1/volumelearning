@@ -11,22 +11,24 @@
 rand('seed', 1);
 clear;
 
-N_inp = 128*128;
+im_size = 16;
+N_inp = im_size*im_size;
 N_hid = 3;
 N_out = N_inp;
 N = N_inp + N_hid + N_out;
 N_v = N_hid + N_out;
 layer_sizes = [N_inp, N_hid, N_out];
-sim_time_sec = 60 * 20;
+sim_time_sec = 38;
 delay_max = 20;
-num_dendrites = 2000;
-num_axons = 300;
+num_dendrites = floor(N_inp / N_hid);
+num_axons = floor(N_inp / N_hid);
 hid_conn_matrix_size = [N_hid, num_dendrites];
 out_conn_matrix_size = [N_hid, num_axons];
-scaling_factor = 25;
+scaling_factor = 30;
 w_init = 0.65 * scaling_factor;
 w_max = w_init * 1.5;
 syn_mean_thresh = w_init * 0.8;
+weak_con_thres = w_init*0.1;
 plot_every = 1;
 
 % Constants and conversions
@@ -114,12 +116,13 @@ debug = [];
 %[ inp, ts, patt_inp, patt_ts ] = embedPat( N_inp );
 
 % DVS data
-[xs, ys, ts, ps] = loadDVSsegment(128, false, 0);
-inp = sub2ind([128 128], xs, ys);
+[xs, ys, ts, ps] = loadDVSsegment(im_size, false, 0);
+inp = sub2ind([im_size im_size], xs, ys);
 ts = floor(ts /1000);
 
 %% Main computation loop
 for sec = 1 : sim_time_sec
+    
     %% Reset second facilitating variables
     spike_times_trace = [];
     spike_arrival_trace = [];
@@ -128,11 +131,14 @@ for sec = 1 : sim_time_sec
     
     %[ inp, ts, patt_inp, patt_ts ] = embedPat( N_inp, patt_inp, patt_ts );
     %ts = ts + (sec-1) * 1000;
-    if mod(sec+1, 30) == 0  %cheeky shift data to keep training
-         ts = ts + 30*1000;
-     end
-    tic;
+    inp_length_sec = floor(ts(end) - ts(1) / 1000);
+    if mod(sec, inp_length_sec) == 0  %cheeky shift data to keep training
+         ts = ts + inp_length_sec*1000;
+    end
+    tic; 
+    %avgs = zeros(1000, 4);
     for ms = 1 : ms_per_sec
+        %tic;
         time = (sec - 1) * ms_per_sec + ms;
         
         Iapp = zeros(size(v));
@@ -153,10 +159,17 @@ for sec = 1 : sim_time_sec
         g_out(isnan(g_out)) = 0;
         gaussian_values_out = w_out .* g_out;
         
+        %avgs(ms, 1) = toc;
+        %tic; 
+        
         % Collect input for each neuron based on synapses facing them
-        % TODO can be optimised with a precalculated array
+        % TODO can be optimised with a precalculated array, Yes this is
+        % slow
         [to_neurons, conn_pre_from, to_neurons_idx] = unique(active_conns);  %TODO fix
         Iapp(to_neurons + N_hid) = accumarray(to_neurons_idx, gaussian_values_out(:));
+        
+        %avgs(ms, 2) = toc;
+        %tic;
         
 %         if time > 500
 %            disp('')
@@ -172,15 +185,23 @@ for sec = 1 : sim_time_sec
             %out_idxs = incoming(incoming(:,1) > N_inp, 2);
             %dApre_out(out_idxs) = dApre_out(out_idxs) + Apre;
         end
+        %avgs(ms, 3) = toc;
+        %tic;
         
         %% Update membrane voltages
         v = v + (v_rest + Iapp - v) / neuron_tau;
         vt(:, ms) = v;
-        
+
         %% Deal with neurons that just spiked
-        fired = [find(v >=v_thres) + N_inp; inp(ts == time)'; N_inp + N_hid + inp(ts == time)'];
+        % TODO: Searching for ts == time is slow if events is large which
+        % it is for real data (searching whole stream). Could trim only
+        % feeding 1 sec to inp per second.
+        fired_pixels = inp(ts == time);
+        fired = [find(v >=v_thres) + N_inp; fired_pixels'; N_inp + N_hid + fired_pixels'];
         spike_times_trace = [spike_times_trace; time*ones(length(fired),1), fired];
-        last_spike_time(fired) = time;
+        last_spike_time(fired) = time; 
+        
+        %avgs(ms, 4) = toc;
         
         for spike = 1 : length(fired)
             neuron_idx = fired(spike);
@@ -257,7 +278,7 @@ for sec = 1 : sim_time_sec
                 end
             end
         end
-
+        
         %% Update (decay) STDP variables
         dApre_hid = dApre_hid * STDPdecaypre;
         dApost_hid = dApost_hid * STDPdecaypost;
@@ -273,13 +294,13 @@ for sec = 1 : sim_time_sec
         end 
         % TODO - Synaptic scaling for output connections??
         %debug = [debug; means(:)'];
-
+        
         % Limit w to between [0, w_max]
         w_hid = max(0, min(w_max, w_hid)); 
         
         % Redistribute weak connections
         % TODO - add in redistribution for output
-        weak_conns = find(w_hid < 5);%  & delays_hid > 19.5);
+        weak_conns = find(w_hid < weak_con_thres);%  & delays_hid > 19.5);
         delays_hid(weak_conns) = rand(size(weak_conns)) * delay_max;
         variance_hid(weak_conns) = rand(size(weak_conns)) * (variance_max - variance_min) + variance_min;
         w_hid(weak_conns) = w_init;
@@ -297,6 +318,7 @@ for sec = 1 : sim_time_sec
         end
         
     end
+    %floor(mean(avgs, 1) * 1000000)
     
     %% Plot results from this second of processing
     if mod(sec, plot_every) == 0
@@ -316,7 +338,7 @@ for sec = 1 : sim_time_sec
         plot(l2_spike_times - offset, l2_spike_idxs, '.r', 'MarkerSize', 8)
         ax = gca;
         i = 0;
-        axis([0, 1000, -200 N_v + 50]);
+        axis([0, 1000, -1 N_v + 50]);
         while i < numel(l2_spike_times)
             i = i + 1;
             pos = l2_spike_times(i);
