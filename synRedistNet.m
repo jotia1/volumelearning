@@ -47,7 +47,7 @@ w_out = ones(out_conn_matrix_size) * w_init;
 % Connections
 % pre is which neurons are pre-synaptic and post is which are post-synaptic
 pre_hid = randi([1 N_inp], hid_conn_matrix_size);
-pre_hid(1, :) = [8, 7, 256, 6, 5, 4];                          % TODO - testing hack
+pre_hid(1, :) = [4, 5, 6, 7, 8, 9];                          % TODO - testing hack
 delays_hid = rand(hid_conn_matrix_size) * delay_max;
 delays_hid(1, :) = [1, 1, 1, 1, 1, 1];                      % TODO - testing hack
 post_hid = cell(N_inp, 1);
@@ -57,8 +57,9 @@ end
 % output connections
 %pre_out = randi([1 N_hid] + N_inp, out_conn_matrix_size);
 delays_out = rand(out_conn_matrix_size) * delay_max;
+delays_out(1, :) = [1, 1, 1, 1, 5, 1, 5, 5];                      % TODO - testing hack
 post_out = randi([N_inp + N_hid + 1, N], out_conn_matrix_size);
-post_out(1, :) = [8, 7, 256, 6, 5, 4, 3, 2] + N_inp + N_hid;               % TODO - testing hack
+post_out(1, :) = [4, 5, 6, 7, 8, 9, 3, 2] + N_inp + N_hid;               % TODO - testing hack
 pre_out = cell(N_out, 1);
 for n = 1 : N_out
     n_idx = n + N_hid + N_inp;
@@ -85,6 +86,7 @@ variance_min = 0.1;
 variance_hid = rand(hid_conn_matrix_size) * (variance_max - variance_min) + variance_min;
 variance_hid(1, :) = [.4, .5, .6, 2, 2, 2]; 
 variance_out = rand(out_conn_matrix_size) * (variance_max - variance_min) + variance_min;
+variance_out(1, :) = [2, 2, 2, 2, 2, 2, 2, 2]; 
 
 
 % STDP variables
@@ -117,7 +119,7 @@ vt(:, 1) = v;
 debug = [];
 
 %% Data
-inp = [8, 7, 256, 6, 5, 4 ];
+inp = [4, 5, 6, 7, 8, 9 ];
 ts = [1, 5, 10, 15, 20, 25];
 %[ inp, ts, patt_inp, patt_ts ] = embedPat( N_inp );
 
@@ -215,27 +217,46 @@ for sec = 1 : sim_time_sec
                disp 
             end
             [neuron_layer, neuron_id] = idx2layerid(layer_sizes, neuron_idx);
-            
-            if neuron_layer ~= 3 % Anything thats not input
-                
-            end
-            
+
             if neuron_layer == 3 % output layer
                 %v(neuron_id) = v_reset; % No lateral inhibition
-                % TODO - Split into hid and out
-                %pre_idxs = find(post_out == n_idx);
-                if time > 14
-                   [[time;time], w_out];
-                end
-                hid_idxs = pre_out{neuron_id};  % The CONNECTION(s) pre to this
-                % Maybe pre_out should give back the connection_idxs
+                hid_conn_idxs = pre_out{neuron_id};  % The CONNECTION(s) pre to this
+                
                 % Update STDP
-                w_out(hid_idxs) = w_out(hid_idxs) + dApre_out(hid_idxs);
-                dApost_out(hid_idxs) = dApost_out(hid_idxs) + Apost;
+                w_out(hid_conn_idxs) = w_out(hid_conn_idxs) + dApre_out(hid_conn_idxs);
+                dApost_out(hid_conn_idxs) = dApost_out(hid_conn_idxs) + Apost;
                 
-                % Output has spiked, reinforce any who spiked just before
-                % TODO
+                % Update SDVL
+                [hid_ids, ~] = ind2sub(size(post_out), hid_conn_idxs);
+                pre_idxs = N_inp + hid_ids;  % TODO should really use layerid2idx here
+                t0_out = time - last_spike_time(pre_idxs)';
+                t0negu_out = t0_out - delays_out(hid_conn_idxs);
+                abst0negu_out = abs(t0negu_out);
+                k = (variance_out(hid_ids, :) + 0.9) .^ 2;
+                shifts = sign(t0negu_out) .* k .* nu;
                 
+                % Update SDVL mean
+                du = zeros(size(hid_conn_idxs));
+                du(t0_out >= a2) = -k(t0_out >= a2) .* nu;
+                du(abst0negu_out >= a1) = shifts(abst0negu_out >=1);
+                
+                delays_out(hid_conn_idxs) = delays_out(hid_conn_idxs) + du;
+                delays_out = max(1, min(delay_max, delays_out));
+                
+                if time == 20
+                    
+                    disp('');
+                    
+                end
+                
+                % Update SDVL variance
+                dv = zeros(size(hid_conn_idxs));
+                dv(abst0negu_out < b2) = -k(abst0negu_out < b2);
+                dv(abst0negu_out >= b1) = k(abst0negu_out >= b1);
+                
+                variance_out(hid_conn_idxs) = variance_out(hid_conn_idxs) + dv;
+                variance_out = max(variance_min, min(variance_max, variance_out));
+
                 
             
             elseif neuron_layer == 2  %hid neuron
@@ -250,22 +271,22 @@ for sec = 1 : sim_time_sec
                 presyn_idxs = pre_hid(neuron_id, :);
                 t0_hid = time - last_spike_time(presyn_idxs)';
                 t0negu_hid = t0_hid - delays_hid(neuron_id, :);
-                abst0negu = abs(t0negu_hid);
+                abst0negu_hid = abs(t0negu_hid);
                 k = (variance_hid(neuron_id, :) + 0.9) .^ 2;
                 shifts = sign(t0negu_hid) .* k .* nu;
                 
                 % Update SDVL mean
                 du = zeros(size(presyn_idxs));              % Otherwise
                 du(t0_hid >= a2) = -k(t0_hid >= a2) .* nu;             % t0 >= a2
-                du(abst0negu >= a1) = shifts(abst0negu >= a1); % |t0-u| >= a1
+                du(abst0negu_hid >= a1) = shifts(abst0negu_hid >= a1); % |t0-u| >= a1
                 
                 delays_hid(neuron_id, :) = delays_hid(neuron_id, :) + du;
                 delays_hid = max(1, min(delay_max, delays_hid));
                 
                 % Update SDVL variance
                 dv = zeros(size(presyn_idxs));               % Otherwise
-                dv(abst0negu < b2) = -k(abst0negu < b2) .* nv;  % |t0-u| < b2
-                dv(abst0negu >= b1) = k(abst0negu >= b1) .* nv; % |t0-u| >= b1
+                dv(abst0negu_hid < b2) = -k(abst0negu_hid < b2) .* nv;  % |t0-u| < b2
+                dv(abst0negu_hid >= b1) = k(abst0negu_hid >= b1) .* nv; % |t0-u| >= b1
 
                 variance_hid(neuron_id, :) = variance_hid(neuron_id, :) + dv;
                 variance_hid = max(variance_min, min(variance_max, variance_hid));
