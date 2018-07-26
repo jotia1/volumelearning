@@ -13,18 +13,18 @@ clear;
 
 im_size = 16;
 N_inp = im_size*im_size;
-N_hid = 3;
+N_hid = 2;
 N_out = N_inp;
 N = N_inp + N_hid + N_out;
 N_v = N_hid + N_out;
 layer_sizes = [N_inp, N_hid, N_out];
-sim_time_sec = 38;
+sim_time_sec = 1;
 delay_max = 20;
-num_dendrites = floor(N_inp / N_hid);
-num_axons = floor(N_inp / N_hid);
+num_dendrites = 6;%floor(N_inp / N_hid);  % TODO - testing hack
+num_axons = 8;%floor(N_inp / N_hid);        % TODO - testing hack
 hid_conn_matrix_size = [N_hid, num_dendrites];
 out_conn_matrix_size = [N_hid, num_axons];
-scaling_factor = 30;
+scaling_factor = 150;                       % TODO - testing hack
 w_init = 0.65 * scaling_factor;
 w_max = w_init * 1.5;
 syn_mean_thresh = w_init * 0.8;
@@ -47,7 +47,9 @@ w_out = ones(out_conn_matrix_size) * w_init;
 % Connections
 % pre is which neurons are pre-synaptic and post is which are post-synaptic
 pre_hid = randi([1 N_inp], hid_conn_matrix_size);
+pre_hid(1, :) = [8, 7, 256, 6, 5, 4];                          % TODO - testing hack
 delays_hid = rand(hid_conn_matrix_size) * delay_max;
+delays_hid(1, :) = [1, 1, 1, 1, 1, 1];                      % TODO - testing hack
 post_hid = cell(N_inp, 1);
 for n = 1 : N_inp
     post_hid{n} = find(pre_hid == n);
@@ -56,11 +58,14 @@ end
 %pre_out = randi([1 N_hid] + N_inp, out_conn_matrix_size);
 delays_out = rand(out_conn_matrix_size) * delay_max;
 post_out = randi([N_inp + N_hid + 1, N], out_conn_matrix_size);
+post_out(1, :) = [8, 7, 256, 6, 5, 4, 3, 2] + N_inp + N_hid;               % TODO - testing hack
 pre_out = cell(N_out, 1);
 for n = 1 : N_out
     n_idx = n + N_hid + N_inp;
-    [layers, ids] = ind2sub(size(post_out), find(post_out == n_idx));
-    pre_out{n} = layers;
+    % Note: pre_out is the pre-synaptic connection index's 
+    pre_out{n} = find(post_out == n_idx);
+    %[layers, ids] = ind2sub(size(post_out), find(post_out == n_idx));
+    %pre_out{n} = layers;
 end
 %pre_out = repmat([1:N_out]', 1, num_axons) + N_inp + N_hid; 
 % post_out = cell(N_hid, 1);
@@ -78,6 +83,7 @@ g_out = zeros(N_out, 1);
 variance_max = 10;
 variance_min = 0.1;
 variance_hid = rand(hid_conn_matrix_size) * (variance_max - variance_min) + variance_min;
+variance_hid(1, :) = [.4, .5, .6, 2, 2, 2]; 
 variance_out = rand(out_conn_matrix_size) * (variance_max - variance_min) + variance_min;
 
 
@@ -111,14 +117,14 @@ vt(:, 1) = v;
 debug = [];
 
 %% Data
-%inp = [5, 2002, 5, 2002, 5, 2002, 2002, 2002, 5, 5, 5];
-%ts = [200, 500, 550, 560, 590, 600, 601, 602, 615, 617, 618];
+inp = [8, 7, 256, 6, 5, 4 ];
+ts = [1, 5, 10, 15, 20, 25];
 %[ inp, ts, patt_inp, patt_ts ] = embedPat( N_inp );
 
 % DVS data
-[xs, ys, ts, ps] = loadDVSsegment(im_size, false, 0);
-inp = sub2ind([im_size im_size], xs, ys);
-ts = floor(ts /1000);
+%[xs, ys, ts, ps] = loadDVSsegment(im_size, false, 0);
+%inp = sub2ind([im_size im_size], xs, ys);
+%ts = floor(ts /1000);
 
 %% Main computation loop
 for sec = 1 : sim_time_sec
@@ -197,7 +203,7 @@ for sec = 1 : sim_time_sec
         % it is for real data (searching whole stream). Could trim only
         % feeding 1 sec to inp per second.
         fired_pixels = inp(ts == time);
-        fired = [find(v >=v_thres) + N_inp; fired_pixels'; N_inp + N_hid + fired_pixels'];
+        fired = [find(v >=v_thres) + N_inp; fired_pixels'; N_inp + N_hid + inp(ts == time  & inp <= N_inp)'];  % TODO Hack to inject spikes
         spike_times_trace = [spike_times_trace; time*ones(length(fired),1), fired];
         last_spike_time(fired) = time; 
         
@@ -205,6 +211,9 @@ for sec = 1 : sim_time_sec
         
         for spike = 1 : length(fired)
             neuron_idx = fired(spike);
+            if neuron_idx == 516
+               disp 
+            end
             [neuron_layer, neuron_id] = idx2layerid(layer_sizes, neuron_idx);
             
             if neuron_layer ~= 3 % Anything thats not input
@@ -214,11 +223,19 @@ for sec = 1 : sim_time_sec
             if neuron_layer == 3 % output layer
                 %v(neuron_id) = v_reset; % No lateral inhibition
                 % TODO - Split into hid and out
-                pre_idxs = find(post_out == n_idx);
-                
+                %pre_idxs = find(post_out == n_idx);
+                if time > 14
+                   [[time;time], w_out];
+                end
+                hid_idxs = pre_out{neuron_id};  % The CONNECTION(s) pre to this
+                % Maybe pre_out should give back the connection_idxs
                 % Update STDP
-                w_out(pre_idxs) = w_out(pre_idxs) + dApre_out(pre_idxs);
-                dApost_out(pre_idxs) = dApost_out(pre_idxs) + Apost;
+                w_out(hid_idxs) = w_out(hid_idxs) + dApre_out(hid_idxs);
+                dApost_out(hid_idxs) = dApost_out(hid_idxs) + Apost;
+                
+                % Output has spiked, reinforce any who spiked just before
+                % TODO
+                
                 
             
             elseif neuron_layer == 2  %hid neuron
@@ -226,6 +243,8 @@ for sec = 1 : sim_time_sec
                 %v(1:N_hid) = v_reset; % Lateral inhibition
                 w_hid(neuron_id, :) = w_hid(neuron_id, :) + dApre_hid(neuron_id, :);
                 dApost_hid(neuron_id, :) = dApost_hid(neuron_id, :) + Apost;
+                % Update STDP of output connections
+                dApre_out(neuron_id, :) = dApre_out(neuron_id, :) + Apre;
                 
                 % Update SDVL
                 presyn_idxs = pre_hid(neuron_id, :);
@@ -251,6 +270,7 @@ for sec = 1 : sim_time_sec
                 variance_hid(neuron_id, :) = variance_hid(neuron_id, :) + dv;
                 variance_hid = max(variance_min, min(variance_max, variance_hid));
                 
+                % STDP - hid (dendrites)
                 % I spiked, penalise any post-synaptics that have spikes
                 % just before this
                 w_out(neuron_id, :) = w_out(neuron_id, :) + dApost_out(neuron_id, :);
@@ -261,7 +281,7 @@ for sec = 1 : sim_time_sec
                     % acitve_spikes to arrive later. 
                     conn_delays = delays_out(neuron_id, delays_out(neuron_id, :) == d);
                     arrival_offset = mod(active_idx + delay - 1, delay_max) + 1;
-                end
+                end  
                 
             else  % First layer (input)
                 conn_idxs = post_hid{neuron_idx};
@@ -338,7 +358,7 @@ for sec = 1 : sim_time_sec
         plot(l2_spike_times - offset, l2_spike_idxs, '.r', 'MarkerSize', 8)
         ax = gca;
         i = 0;
-        axis([0, 1000, -1 N_v + 50]);
+        axis([0, 30, -30 N_v + 50]);
         while i < numel(l2_spike_times)
             i = i + 1;
             pos = l2_spike_times(i);
@@ -352,13 +372,13 @@ for sec = 1 : sim_time_sec
 
         subplot(4, 2, 5);
         hist(pre_hid');
-        legend({'Blue - N1', 'Brown - N2', 'Yellow - N3'});
+        %legend({'Blue - N1', 'Brown - N2', 'Yellow - N3'});
         title(sprintf('Synaptic distribution at second: %d', sec-1));
         xlabel('Pixel number');
-        ylabel('Number of connections from each output in range')
+        ylabel('Number of connections from each output in range');
         drawnow;
         
-        subplot(4, 2, 2)
+        subplot(4, 2, 2);
         hist(w_hid');
         title('weights\_hid');
         
@@ -374,8 +394,9 @@ for sec = 1 : sim_time_sec
         
         subplot(4, 2, 7);
         plot(1:ms_per_sec, vt(1:N_hid,:));
+        axis([0 30 -70 -50]);
         title(sprintf('second: %d', sec-1));
-        legend({'Neuron 1', 'Neuron 2', 'Neuron 3'});
+        %legend({'Neuron 1', 'Neuron 2', 'Neuron 3'});
         xlabel('Time (ms)');
         ylabel('Membrane potential (mV)');
         hold off;
