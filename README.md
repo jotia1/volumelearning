@@ -18,7 +18,8 @@ The synapse redistribution is loosely based around synaptogensis, if a connectio
 - Event-based data [implemented](https://github.com/jotia1/volumelearning/commit/b20913259869c4b4b72d1bc477d95ddf5d10688e)
 - Lateral inhibition [demo](https://github.com/jotia1/volumelearning/commit/1b133133da6e11418606fad0128825dba81ef890)
 - Synaptic redistribution network [example](https://github.com/jotia1/volumelearning/commit/633f98e995410d1023ba54e7e28feec06464da6a)
-- Autoencoder now (functional)[] for DVS sized data (no plasticity in axons)
+- Autoencoder now ([functional](https://github.com/jotia1/volumelearning/commit/5834e0c07bec67dac179a440856edb2f5dc65919)) for DVS sized data (no plasticity in axons)
+- Full dendrite and axon plasticity [implemented](https://github.com/jotia1/volumelearning/commit/d2fd99f6c2ba22a04a550dd17fcf428283326cec)
 
 ## Todo list
 - [x] Gaussian synapses [1]
