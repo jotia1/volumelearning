@@ -335,6 +335,7 @@ for sec = 1 : sim_time_sec
         
         % Limit w to between [0, w_max]
         w_hid = max(0, min(w_max, w_hid)); 
+        w_out = max(0, min(w_max, w_out));
         
         % Redistribute weak connections
         % TODO - add in redistribution for output
