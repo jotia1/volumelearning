@@ -6,13 +6,13 @@ function [ output ] = runsinglelayer( net )
 %% Connectivity explanations
 % pre_dend [mat] - is the pixel ID which is presynaptic to a connection in 
 %       the dendrite layer. Indexed by connection.
-% post_dend [cell] - Neuron ID(s) that are postsynaptic to a given pixel
-%       from the input layer. Indexed by input layer pixel ID.
+% post_dend [cell] - Dendrite connection idx(s) for a given pixel from the 
+%       input layer. Indexed by input layer pixel ID.
 % delays_dend [mat] - the delay along a given hidden connection. (Idexed by
 %       connection id.
 % pre_axon [cell] - Gives the axon connection ID(s) of neurons presynaptic 
 %       to the given pixel ID. Indexed by pixel ID.
-% post_axon [mat] - Gives the pixel ID postsynaptic of a connection.
+% post_axon [mat] - Gives the pixel index postsynaptic of a connection.
 %       Indexed by connection ID. 
 % delays_axon [mat] - Gives the delay along a particular axon connection.
 %       Indexed by connection ID. 
@@ -23,6 +23,7 @@ output = struct();
 timing_info = struct();
 output.timing_info.init_time = tic;
 assert(validatenetwork(net), 'Error with network description');
+rand('seed', net.rand_seed);
 
 layer_sizes = [net.N_inp, net.N_hid, net.N_out];
 dend_conn_matrix_size = [net.N_hid, net.num_dendrites];
@@ -32,20 +33,39 @@ neuron_start_idx = net.N_inp + 1;
 axon_start_idx = neuron_start_idx + net.N_hid;
 
 v = net.v_rest * ones(net.N_v, 1);
-w_dend = ones(dend_conn_matrix_size) * net.w_init;
-w_axon = ones(axon_conn_matrix_size) * net.w_init;
 
-% Connections
-pre_dend = randi([1 net.N_inp], dend_conn_matrix_size);
-delays_dend = rand(dend_conn_matrix_size) * net.delay_max;
+%% Connections
+w_dend = net.w_dend;
+if isempty(w_dend)
+    w_dend = ones(dend_conn_matrix_size) * net.w_init;
+end
+w_axon = net.w_axon;
+if isempty(w_axon)
+    w_axon = ones(axon_conn_matrix_size) * net.w_init;
+end
+
+pre_dend = net.pre_dend; 
+if isempty(pre_dend) 
+    pre_dend = randi([1 net.N_inp], dend_conn_matrix_size);
+end
+delays_dend = net.delays_dend;
+if isempty(delays_dend)
+    delays_dend = rand(dend_conn_matrix_size) * net.delay_max;
+end
 post_dend = cell(net.N_inp, 1);
 for n = 1 : net.N_inp
     post_dend{n} = find(pre_dend == n);
 end
 
 % output connections
-delays_axon = rand(axon_conn_matrix_size) * net.delay_max;
-post_axon = randi([axon_start_idx, net.N], axon_conn_matrix_size);
+post_axon = net.post_axon;
+if isempty(post_axon)
+    post_axon = randi([axon_start_idx, net.N], axon_conn_matrix_size);
+end
+delays_axon = net.delays_axon;
+if isempty(delays_axon)
+    delays_axon = rand(axon_conn_matrix_size) * net.delay_max;
+end
 pre_axon = cell(net.N_out, 1);
 for n = 1 : net.N_out
     n_idx = n + axon_start_idx - 1;
@@ -59,8 +79,14 @@ last_spike_time = zeros(net.N, 1) * -Inf;
 g_dend = zeros(net.N_hid, 1);
 g_axon = zeros(net.N_out, 1);
 variance_range = (net.variance_max - net.variance_min) + net.variance_min;
-variance_dend = rand(dend_conn_matrix_size) * variance_range;
-variance_axon = rand(axon_conn_matrix_size) * variance_range;
+variance_dend = net.variance_dend;
+if isempty(variance_dend)
+    variance_dend = rand(dend_conn_matrix_size) * variance_range;
+end
+variance_axon = net.variance_axon;
+if isempty(variance_axon)
+    variance_axon = rand(axon_conn_matrix_size) * variance_range;
+end
 
 % STDP variables
 STDPdecaypre = exp(-1/net.taupre);
@@ -107,7 +133,9 @@ output.timing_info.plotting_tocs = [];
 for sec = 1 : net.sim_time_sec
     
     output.timing_info.sim_sec_times(sec) = tic;
-    output.spike_times_trace = [output.spike_times_trace; spike_times_trace]; % TODO should speed this up (expanding list).
+    if numel(spike_times_trace) > 0
+        disp('')
+    end
     spike_times_trace = [];
     vt = zeros(size(vt));
     vt(:, 1) = v;
@@ -127,18 +155,25 @@ for sec = 1 : net.sim_time_sec
         gaussian_values_dend = w_dend .* g_dend;
         Iapp(1:net.N_hid, :) = sum(gaussian_values_dend(1:net.N_hid, :), 2);
         % Axons
-        t0_axon = time - last_spike_time(axon_start_idx:end);
-        [~, active_conns] = idx2layerid(layer_sizes, post_axon);
-        t0negu_axon = t0_axon(active_conns) - delays_axon;
+        t0_axon = time - last_spike_time(neuron_start_idx:axon_start_idx - 1);
+        [~, active_conns] = idx2layerid(layer_sizes, post_axon); % convert to id's
+        t0negu_axon = repmat(t0_axon, 1, net.num_axons) - delays_axon;
         scale_axon = 1 ./ (variance_axon .* sqrt(2 * pi));
         g_axon = scale_axon .* exp((-1/2) .* ((t0negu_axon) ./ variance_axon) .^2 );
         g_axon(isnan(g_axon)) = 0;
         gaussian_values_axon = w_axon .* g_axon;
 
         [to_neurons, ~, to_neurons_idx] = unique(active_conns);  %TODO fix speed
+        if mean(gaussian_values_axon(:)) > 0
+            disp('');
+        end
         Iapp(net.N_hid + to_neurons) = accumarray(to_neurons_idx, gaussian_values_axon(:));
    
-        %% A spike has arrived
+        if mean(Iapp(:)) > 0
+            disp('')
+        end
+        
+        %% A spike has arrived do STDP
         incoming = active_spikes{active_idx}; 
         if ~isempty(incoming)
             active_spikes{active_idx} = [];
@@ -150,6 +185,7 @@ for sec = 1 : net.sim_time_sec
             dApre_axon(hid_spike_idxs) = dApre_axon(hid_spike_idxs) + net.Apre;
             
         end
+        
         %% Update membrane voltages
         v = v + (net.v_rest + Iapp - v) / net.neuron_tau;
         vt(:, ms) = v;
@@ -164,6 +200,63 @@ for sec = 1 : net.sim_time_sec
         spike_times_trace = [spike_times_trace; time*ones(length(fired),1), fired];
         last_spike_time(fired) = time; 
         
+        for spike = 1 : length(fired)
+            neuron_idx = fired(spike);
+            [neuron_layer, neuron_id] = idx2layerid(layer_sizes, neuron_idx);
+        
+            if neuron_layer == 3 % output layer
+                hid_conn_idxs = pre_axon{neuron_id};
+                v(neuron_id + net.N_hid) = net.v_reset;
+                
+                
+            elseif neuron_layer == 2  %hid neuron
+                v(neuron_id) = net.v_reset;
+                if net.lateral_inhibition_on 
+                    v(1:net.N_hid) = v_reset; % Lateral inhibition
+                end
+                
+                % Update STDP of dendrites
+                % I spiked - reinforce any recent dendritic connections
+                % (they contributed to my spike).
+                w_dend(neuron_id, :) = w_dend(neuron_id, :) + dApre_dend(neuron_id, :);
+                dApost_dend(neuron_id, :) = dApost_dend(neuron_id, :) + net.Apost;
+                
+                % Update STDP of axons
+                % I spiked - penalise any axon connections that recently
+                % fired (in this axon context I am presynaptic neuron)
+                w_axon(neuron_id, :) = w_axon(neuron_id, :) + dApost_axon(neuron_id, :);
+                
+                % Set up active spikes (to later adjust dApre)
+                conn_delays = round(delays_axon(neuron_id, :));
+                arrival_offsets = mod(active_idx + conn_delays - 1, net.delay_max) + 1;
+                [to_offsets, ~, offset_idxs] = unique(arrival_offsets);
+                for i = 1 : numel(to_offsets)
+                    to_offset = to_offsets(i);
+                    neuron_local_idxs = find(offset_idxs == i);
+                    conn_idxs = sub2ind(size(delays_axon), ones(size(neuron_local_idxs)) * neuron_id, neuron_local_idxs);
+                    active_spikes{to_offset} = [active_spikes{to_offset}; ones(size(conn_idxs)) * neuron_idx, conn_idxs];
+                end
+                
+                % Update SDVL
+                % TODO
+
+            else  % First layer (input)
+                conn_idxs = post_dend{neuron_id};
+                % penalise connection(s) if the postsynaptic spiked recently.
+                w_dend(conn_idxs) = w_dend(conn_idxs) + dApost_dend(conn_idxs);
+                
+                paths = post_dend{neuron_id};
+                for path = 1 : numel(paths)
+                    % Keep track of when this spike will arrive at each
+                    % postsynaptic neuron and through which connection.
+                    conn_idx = paths(path);
+                    delay = round(delays_dend(conn_idx));
+                    arrival_offset = mod(active_idx + delay - 1, net.delay_max) + 1;
+                    active_spikes{arrival_offset} = [active_spikes{arrival_offset}; neuron_idx, conn_idx];
+                end
+            end
+        end
+        
     end
     output.timing_info.sim_sec_tocs(sec) = toc(output.timing_info.sim_sec_times(sec));
     
@@ -171,9 +264,12 @@ for sec = 1 : net.sim_time_sec
     if mod(sec, net.plot_every) == 0
         output.timing_info.plotting_tics(end + 1) = tic;
         %visualiseweights(); % TODO: turn into function
-       
+        plot(vt(axon_start_idx-1, :)')
         output.timing_info.plotting_tocs(end + 1) = toc(output.timing_info.plotting_tics(end));
     end
+    
+    output.spike_times_trace = [output.spike_times_trace; spike_times_trace]; % TODO should speed this up (expanding list).
+
     
 end
 
