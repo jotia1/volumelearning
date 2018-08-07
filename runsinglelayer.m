@@ -208,6 +208,35 @@ for sec = 1 : net.sim_time_sec
                 hid_conn_idxs = pre_axon{neuron_id};
                 v(neuron_id + net.N_hid) = net.v_reset;
                 
+                % Update STDP
+                w_axon(hid_conn_idxs) = w_axon(hid_conn_idxs) + dApre_axon(hid_conn_idxs);
+                dApost_axon(hid_conn_idxs) = dApost_axon(hid_conn_idxs) + net.Apost;
+                
+                % Update SDVL
+                [hid_ids, ~] = ind2sub(size(post_axon), hid_conn_idxs);
+                pre_idxs = net.N_inp + hid_ids;  % TODO should really use layerid2idx here
+                t0_axon = time - last_spike_time(pre_idxs);
+                t0negu_axon = t0_axon - delays_axon(hid_conn_idxs);
+                abst0negu_axon = abs(t0negu_axon);
+                k = (variance_axon(hid_conn_idxs) + 0.9) .^ 2;
+                shifts = sign(t0negu_axon) .* k .* net.nu;
+                
+                % Update SDVL mean
+                du = zeros(size(hid_conn_idxs));
+                du(t0_axon >= net.a2) = -k(t0_axon >= net.a2) .* net.nu;
+                du(abst0negu_axon >= net.a1) = shifts(abst0negu_axon >= net.a1);% TODO: verify this line is correct, made an edit without checkign the maths.
+                
+                delays_axon(hid_conn_idxs) = delays_axon(hid_conn_idxs) + du;
+                delays_axon = max(1, min(net.delay_max, delays_axon));
+                
+                % Update SDVL variance
+                dv = zeros(size(hid_conn_idxs));
+                dv(abst0negu_axon < net.b2) = -k(abst0negu_axon < net.b2);
+                dv(abst0negu_axon >= net.b1) = k(abst0negu_axon >= net.b1);
+                
+                variance_axon(hid_conn_idxs) = variance_axon(hid_conn_idxs) + dv;
+                variance_axon = max(net.variance_min, min(net.variance_max, variance_axon));
+            
                 
             elseif neuron_layer == 2  %hid neuron
                 v(neuron_id) = net.v_reset;
@@ -216,16 +245,11 @@ for sec = 1 : net.sim_time_sec
                 end
                 
                 % Update STDP of dendrites
-                % I spiked - reinforce any recent dendritic connections
-                % (they contributed to my spike).
                 w_dend(neuron_id, :) = w_dend(neuron_id, :) + dApre_dend(neuron_id, :);
                 dApost_dend(neuron_id, :) = dApost_dend(neuron_id, :) + net.Apost;
                 
                 % Update STDP of axons
-                % I spiked - penalise any axon connections that recently
-                % fired (in this axon context I am presynaptic neuron)
                 w_axon(neuron_id, :) = w_axon(neuron_id, :) + dApost_axon(neuron_id, :);
-                
                 % Set up active spikes (to later adjust dApre)
                 conn_delays = round(delays_axon(neuron_id, :));
                 arrival_offsets = mod(active_idx + conn_delays - 1, net.delay_max) + 1;
@@ -238,7 +262,29 @@ for sec = 1 : net.sim_time_sec
                 end
                 
                 % Update SDVL
-                % TODO
+                presyn_idxs = pre_dend(neuron_id, :);
+                t0_dend = time - last_spike_time(presyn_idxs)';
+                t0negu_dend = t0_dend - delays_dend(neuron_id, :);
+                abst0negu_dend = abs(t0negu_dend);
+                k = (variance_dend(neuron_id, :) + 0.9) .^ 2;
+                shifts = sign(t0negu_dend) .* k .* net.nu;
+                
+                % Update SDVL mean
+                du = zeros(size(presyn_idxs));              % Otherwise
+                du(t0_dend >= net.a2) = -k(t0_dend >= net.a2) .* net.nu;             % t0 >= a2
+                du(abst0negu_dend >= net.a1) = shifts(abst0negu_dend >= net.a1); % |t0-u| >= a1
+                
+                delays_dend(neuron_id, :) = delays_dend(neuron_id, :) + du;
+                delays_dend = max(1, min(net.delay_max, delays_dend));
+                
+                % Update SDVL variance
+                dv = zeros(size(presyn_idxs));               % Otherwise
+                dv(abst0negu_dend < net.b2) = -k(abst0negu_dend < net.b2) .* net.nv;  % |t0-u| < b2
+                dv(abst0negu_dend >= net.b1) = k(abst0negu_dend >= net.b1) .* net.nv; % |t0-u| >= b1
+
+                variance_dend(neuron_id, :) = variance_dend(neuron_id, :) + dv;
+                variance_dend = max(net.variance_min, min(net.variance_max, variance_dend));
+
 
             else  % First layer (input)
                 conn_idxs = post_dend{neuron_id};
@@ -257,6 +303,42 @@ for sec = 1 : net.sim_time_sec
             end
         end
         
+        %% Update (decay) STDP variables
+        dApre_dend = dApre_dend * STDPdecaypre;
+        dApost_dend = dApost_dend * STDPdecaypost;
+        dApre_axon = dApre_dend * STDPdecaypre;
+        dApost_axon = dApost_dend * STDPdecaypost;
+        active_idx = mod(active_idx, net.delay_max) + 1;
+        
+        % Dendritic synaptic scaling
+        means = mean(w_dend, 2);
+        to_scale = net.synaptic_scaling_dend & means < net.syn_mean_thresh;
+        if sum(to_scale) > 0
+            w_dend(to_scale, :) = w_dend(to_scale, :) .* (net.syn_mean_thresh ./ means(to_scale));
+        end 
+        
+        % Synaptic bounding - limit w to [0, w_max]
+        w_dend = max(0, min(net.w_max, w_dend)); 
+        w_axon = max(0, min(net.w_max, w_axon));
+        
+%         % Redistribute weak connections
+%         % TODO - add in redistribution for output
+%         weak_conns = find(net.synaptic_redistribution_on & w_hid < weak_con_thres);%  & delays_hid > 19.5);
+%         delays_hid(weak_conns) = rand(size(weak_conns)) * delay_max;
+%         variance_hid(weak_conns) = rand(size(weak_conns)) * (variance_max - variance_min) + variance_min;
+%         w_hid(weak_conns) = w_init;
+%         dApre_hid(weak_conns) = 0;
+%         dApost_hid(weak_conns) = 0;
+%         last_spike_time(weak_conns) = -Inf;
+% 
+%         for c = 1 : numel(weak_conns)
+%             conn = weak_conns(c);
+%             old_pre = pre_hid(conn);
+%             post_hid{old_pre}(post_hid{old_pre} == conn) = [];
+%             new_pre = randi([1 N_inp]);
+%             pre_hid(conn) = new_pre;
+%             post_hid{new_pre}(end + 1) = conn;
+%         end       
     end
     output.timing_info.sim_sec_tocs(sec) = toc(output.timing_info.sim_sec_times(sec));
     

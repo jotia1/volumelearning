@@ -35,6 +35,7 @@ default_net.syn_mean_thresh = default_net.w_init * 0.8;
 default_net.weak_con_thres = default_net.w_init * 0.1;
 default_net.plot_every = 1;
 default_net.lateral_inhibition_on = false;
+default_net.synaptic_scaling_dend = true;
 
 % Neuron params
 default_net.v_rest = -65;
