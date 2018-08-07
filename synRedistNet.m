@@ -159,7 +159,7 @@ for sec = 1 : sim_time_sec
         gaussian_values_hid = w_hid .* g_hid;
         Iapp(1:N_hid, :) = sum(gaussian_values_hid(1:N_hid, :), 2);
         % Output layer
-        t0_out = time - last_spike_time(N-N_out+1:end);
+        t0_out = time - last_spike_time(N-N_out+1:end);  % TODO : check maths, t0 potentially incorrectly calculated.
         [~, active_conns] = idx2layerid(layer_sizes, post_out);
         t0negu_out = t0_out(active_conns) - delays_out;
         scale_out = 1 ./ (variance_out .* sqrt(2 * pi));
