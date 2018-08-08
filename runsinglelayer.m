@@ -112,8 +112,9 @@ if net.input_source == 'G'
 elseif net.input_source == 'D'
     % DVS data
     [xs, ys, ts, ps] = loadDVSsegment(128, false, 0);
-    [ xs, ys, ts, ps ] = dvs2patch( xs, ys, ts, ps, 8, 50, 30 );
-    inp = sub2ind([net.inp_img_size net.inp_img_size], xs, ys);
+    [ xs, ys, ts, ps ] = dvs2patch( xs, ys, ts, ps, net.inp_img_size, 50, 30 );
+    rows = net.inp_img_size - ys + 1; cols = net.inp_img_size - xs + 1;
+    inp = sub2ind([net.inp_img_size net.inp_img_size], rows, cols);
     ts = floor(ts /1000);
 elseif net.input_source == 'S'
     inp = net.supplied_input;
@@ -133,9 +134,7 @@ output.timing_info.plotting_tocs = [];
 for sec = 1 : net.sim_time_sec
     
     output.timing_info.sim_sec_times(sec) = tic;
-    if numel(spike_times_trace) > 0
-        disp('')
-    end
+
     spike_times_trace = [];
     vt = zeros(size(vt));
     vt(:, 1) = v;
@@ -239,10 +238,7 @@ for sec = 1 : net.sim_time_sec
             
                 
             elseif neuron_layer == 2  %hid neuron
-                v(neuron_id) = net.v_reset;
-                if net.lateral_inhibition_on 
-                    v(1:net.N_hid) = v_reset; % Lateral inhibition
-                end
+                v([neuron_id, find(net.lateral_inhibition_on)*1:net.N_hid]) = net.v_reset;
                 
                 % Update STDP of dendrites
                 w_dend(neuron_id, :) = w_dend(neuron_id, :) + dApre_dend(neuron_id, :);
@@ -317,6 +313,8 @@ for sec = 1 : net.sim_time_sec
             w_dend(to_scale, :) = w_dend(to_scale, :) .* (net.syn_mean_thresh ./ means(to_scale));
         end 
         
+        % TODO: axonal synaptic scaling
+        
         % Synaptic bounding - limit w to [0, w_max]
         w_dend = max(0, min(net.w_max, w_dend)); 
         w_axon = max(0, min(net.w_max, w_axon));
@@ -345,8 +343,9 @@ for sec = 1 : net.sim_time_sec
     %% Plotting
     if mod(sec, net.plot_every) == 0
         output.timing_info.plotting_tics(end + 1) = tic;
-        %visualiseweights(); % TODO: turn into function
-        plot(vt(axon_start_idx-1, :)')
+        neuron_to_plot = 1;
+        visualiseweights; 
+
         output.timing_info.plotting_tocs(end + 1) = toc(output.timing_info.plotting_tics(end));
     end
     
