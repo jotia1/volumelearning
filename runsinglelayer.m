@@ -115,7 +115,7 @@ elseif net.input_source == 'D'
     [ xs, ys, ts, ps ] = dvs2patch( xs, ys, ts, ps, net.inp_img_size, 50, 30 );
     rows = net.inp_img_size - ys + 1; cols = net.inp_img_size - xs + 1;
     inp = sub2ind([net.inp_img_size net.inp_img_size], rows, cols);
-    ts = floor(ts /1000);
+    ts = floor(ts / 1000);
 elseif net.input_source == 'S'
     inp = net.supplied_input;
     ts = net.supplied_ts;
@@ -314,10 +314,21 @@ for sec = 1 : net.sim_time_sec
         end 
         
         % TODO: axonal synaptic scaling
+        means = mean(w_axon, 2);
+        to_scale = net.synaptic_scaling_axon & means < net.syn_mean_thresh;
+        if sum(to_scale) > 0
+            w_axon(to_scale, :) = w_axon(to_scale, :) .* (net.syn_mean_thresh ./ means(to_scale));
+            %        neuron_to_plot = 3;
+            %visualiseweights;
+            %disp(time);
+        end         
         
         % Synaptic bounding - limit w to [0, w_max]
         w_dend = max(0, min(net.w_max, w_dend)); 
         w_axon = max(0, min(net.w_max, w_axon));
+        %neuron_to_plot = 3;
+        %visualiseweights;
+        %disp('');
         
 %         % Redistribute weak connections
 %         % TODO - add in redistribution for output
@@ -336,16 +347,18 @@ for sec = 1 : net.sim_time_sec
 %             new_pre = randi([1 N_inp]);
 %             pre_hid(conn) = new_pre;
 %             post_hid{new_pre}(end + 1) = conn;
-%         end       
+%         end  
     end
     output.timing_info.sim_sec_tocs(sec) = toc(output.timing_info.sim_sec_times(sec));
     
     %% Plotting
     if mod(sec, net.plot_every) == 0
         output.timing_info.plotting_tics(end + 1) = tic;
-        neuron_to_plot = 1;
+        neuron_to_plot = 3;
         visualiseweights; 
-
+        subplot(3, 1, 3);
+        plot(vt(1:3, :)');
+        drawnow;
         output.timing_info.plotting_tocs(end + 1) = toc(output.timing_info.plotting_tics(end));
     end
     

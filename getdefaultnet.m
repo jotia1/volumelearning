@@ -36,6 +36,7 @@ default_net.weak_con_thres = default_net.w_init * 0.1;
 default_net.plot_every = 1;
 default_net.lateral_inhibition_on = false;
 default_net.synaptic_scaling_dend = true;
+default_net.synaptic_scaling_axon = true;
 
 % Neuron params
 default_net.v_rest = -65;
@@ -54,8 +55,8 @@ default_net.k = 1;
 default_net.nu = 0.0338;
 default_net.nv = 0.0218;
 
-default_net.taupre = 20;
-default_net.taupost = 20;
+default_net.taupre = 16;
+default_net.taupost = 33;
 default_net.Apre = 0.1 * default_net.scaling_factor;
 default_net.Apost = -0.12 * default_net.scaling_factor;
 
