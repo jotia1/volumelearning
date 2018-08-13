@@ -104,6 +104,8 @@ output.spike_times_trace = [];
 vt = zeros(size(v, 1), ms_per_sec);
 vt(:, 1) = v;
 
+neuron_to_plot = net.neuron_to_plot;
+
 %% Load data
 output.timing_info.load_data = tic;
 %% Data
@@ -112,7 +114,7 @@ if net.input_source == 'G'
 elseif net.input_source == 'D'
     % DVS data
     [xs, ys, ts, ps] = loadDVSsegment(128, false, 0);
-    [ xs, ys, ts, ps ] = dvs2patch( xs, ys, ts, ps, net.inp_img_size, 50, 30 );
+    [ xs, ys, ts, ps ] = dvs2patch( xs, ys, ts, ps, net.inp_img_size, net.sim_time_sec, 30 );
     rows = net.inp_img_size - ys + 1; cols = net.inp_img_size - xs + 1;
     inp = sub2ind([net.inp_img_size net.inp_img_size], rows, cols);
     ts = floor(ts / 1000);
@@ -180,8 +182,11 @@ for sec = 1 : net.sim_time_sec
             inp_spike_idxs = incoming(from_inp, 2);
             dApre_dend(inp_spike_idxs) = dApre_dend(inp_spike_idxs) + net.Apre;
             
-            hid_spike_idxs = incoming(~from_inp, 2);
+            hid_spike_idxs = incoming(:,1) < axon_start_idx & ~from_inp;
             dApre_axon(hid_spike_idxs) = dApre_axon(hid_spike_idxs) + net.Apre;
+            if sum(dApre_axon(:)) > 0
+                disp('');
+            end
             
         end
         
@@ -208,8 +213,12 @@ for sec = 1 : net.sim_time_sec
                 v(neuron_id + net.N_hid) = net.v_reset;
                 
                 % Update STDP
+
                 w_axon(hid_conn_idxs) = w_axon(hid_conn_idxs) + dApre_axon(hid_conn_idxs);
                 dApost_axon(hid_conn_idxs) = dApost_axon(hid_conn_idxs) + net.Apost;
+                
+                
+                
                 
                 % Update SDVL
                 [hid_ids, ~] = ind2sub(size(post_axon), hid_conn_idxs);
@@ -302,8 +311,8 @@ for sec = 1 : net.sim_time_sec
         %% Update (decay) STDP variables
         dApre_dend = dApre_dend * STDPdecaypre;
         dApost_dend = dApost_dend * STDPdecaypost;
-        dApre_axon = dApre_dend * STDPdecaypre;
-        dApost_axon = dApost_dend * STDPdecaypost;
+        dApre_axon = dApre_axon * STDPdecaypre;
+        dApost_axon = dApost_axon * STDPdecaypost;
         active_idx = mod(active_idx, net.delay_max) + 1;
         
         % Dendritic synaptic scaling
@@ -313,7 +322,7 @@ for sec = 1 : net.sim_time_sec
             w_dend(to_scale, :) = w_dend(to_scale, :) .* (net.syn_mean_thresh ./ means(to_scale));
         end 
         
-        % TODO: axonal synaptic scaling
+        % Axonal synaptic scaling
         means = mean(w_axon, 2);
         to_scale = net.synaptic_scaling_axon & means < net.syn_mean_thresh;
         if sum(to_scale) > 0
@@ -354,11 +363,14 @@ for sec = 1 : net.sim_time_sec
     %% Plotting
     if mod(sec, net.plot_every) == 0
         output.timing_info.plotting_tics(end + 1) = tic;
-        neuron_to_plot = 3;
-        visualiseweights; 
-        subplot(3, 1, 3);
-        plot(vt(1:3, :)');
-        drawnow;
+                
+        if net.num_dimensions_to_plot == 2
+            visualise2Dweights; 
+        elseif net.num_dimensions_to_plot == 1
+            visualise1Dweights;
+        end
+        
+
         output.timing_info.plotting_tocs(end + 1) = toc(output.timing_info.plotting_tics(end));
     end
     

@@ -8,6 +8,7 @@ default_net.inp_img_size = 8;
 default_net.N_hid = 3;
 default_net.N_inp = default_net.inp_img_size * default_net.inp_img_size;
 default_net.N_out = default_net.N_inp;
+% TODO: should remove N and N_v from default net
 default_net.N = default_net.N_inp + default_net.N_hid + default_net.N_out;
 default_net.N_v = default_net.N_hid + default_net.N_out;
 
@@ -23,15 +24,15 @@ default_net.variance_dend = [];
 default_net.variance_axon = [];
 
 % Simulation run parameters
-default_net.rand_seed = 1;
+default_net.rand_seed = 2;
 default_net.sim_time_sec = 5;
-default_net.delay_max = 20;
+default_net.delay_max = 1;
 default_net.num_dendrites = 32;
 default_net.num_axons = 32;
-default_net.scaling_factor = 150;
+default_net.scaling_factor = 40;
 default_net.w_init = 0.65 * default_net.scaling_factor;
-default_net.w_max = default_net.w_init * 1.5;
-default_net.syn_mean_thresh = default_net.w_init * 0.8;
+default_net.w_max = default_net.w_init * 1.1;
+default_net.syn_mean_thresh = default_net.w_init * 0.6;
 default_net.weak_con_thres = default_net.w_init * 0.1;
 default_net.plot_every = 1;
 default_net.lateral_inhibition_on = false;
@@ -45,7 +46,7 @@ default_net.v_thres = -55;
 default_net.neuron_tau = 20;
 
 % SDVL params
-default_net.variance_max = 10;
+default_net.variance_max = 4;
 default_net.variance_min = 0.1;
 default_net.a1 = 1;
 default_net.a2 = 3;
@@ -59,6 +60,9 @@ default_net.taupre = 16;
 default_net.taupost = 33;
 default_net.Apre = 0.1 * default_net.scaling_factor;
 default_net.Apost = -0.12 * default_net.scaling_factor;
+
+default_net.num_dimensions_to_plot = 2;
+default_net.neuron_to_plot = 1;
 
 % Data params
 % Options are 'G': Generated, 'D': DVS, 'S': Supplied
