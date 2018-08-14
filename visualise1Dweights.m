@@ -1,7 +1,5 @@
 %% VISUALISE1DWEIGHTS - Visualise network variables in the workspace
 
-disp('plotting 1D weights');
-
 num_rows = 4;
 num_cols = 5;
 
@@ -57,7 +55,7 @@ hold on
 plot(l2_spike_times - offset, l2_spike_idxs, '.r', 'MarkerSize', 8)
 ax = gca;
 i = 0;
-%axis([0, 30, -30 N_v + 50]);
+axis([0 1000 1 net.N_v + 1]);
 while i < numel(l2_spike_times)
     i = i + 1;
     pos = l2_spike_times(i);
@@ -70,8 +68,8 @@ ylabel('Neuron number');
 
 % Draw voltages
 subplot(num_rows, 1, num_rows);
-plot(vt(1:3, :)');
-legend({'n1', 'n2', 'n3'});
+plot(vt(1, :)');
+legend({'n1'});
 
 drawnow;
 

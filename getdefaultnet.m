@@ -27,6 +27,7 @@ default_net.variance_axon = [];
 default_net.rand_seed = 2;
 default_net.sim_time_sec = 5;
 default_net.delay_max = 1;
+default_net.delay_min = 1;
 default_net.num_dendrites = 32;
 default_net.num_axons = 32;
 default_net.scaling_factor = 40;

@@ -50,7 +50,7 @@ if isempty(pre_dend)
 end
 delays_dend = net.delays_dend;
 if isempty(delays_dend)
-    delays_dend = rand(dend_conn_matrix_size) * net.delay_max;
+    delays_dend = rand(dend_conn_matrix_size) * (net.delay_max - net.delay_min) + net.delay_min;
 end
 post_dend = cell(net.N_inp, 1);
 for n = 1 : net.N_inp
@@ -64,7 +64,7 @@ if isempty(post_axon)
 end
 delays_axon = net.delays_axon;
 if isempty(delays_axon)
-    delays_axon = rand(axon_conn_matrix_size) * net.delay_max;
+    delays_axon = rand(axon_conn_matrix_size) * (net.delay_max - net.delay_min) + net.delay_min;
 end
 pre_axon = cell(net.N_out, 1);
 for n = 1 : net.N_out
@@ -78,14 +78,13 @@ last_spike_time = zeros(net.N, 1) * -Inf;
 % Synapse dynamics parameters
 g_dend = zeros(net.N_hid, 1);
 g_axon = zeros(net.N_out, 1);
-variance_range = (net.variance_max - net.variance_min) + net.variance_min;
 variance_dend = net.variance_dend;
 if isempty(variance_dend)
-    variance_dend = rand(dend_conn_matrix_size) * variance_range;
+    variance_dend = rand(dend_conn_matrix_size) * (net.variance_max - net.variance_min) + net.variance_min;
 end
 variance_axon = net.variance_axon;
 if isempty(variance_axon)
-    variance_axon = rand(axon_conn_matrix_size) * variance_range;
+    variance_axon = rand(axon_conn_matrix_size) * (net.variance_max - net.variance_min) + net.variance_min;
 end
 
 % STDP variables
@@ -373,7 +372,8 @@ for sec = 1 : net.sim_time_sec
 
         output.timing_info.plotting_tocs(end + 1) = toc(output.timing_info.plotting_tics(end));
     end
-    sec
+    
+    fprintf('Second: %d, Elapsed: %.3f \n', sec, output.timing_info.sim_sec_tocs(sec));
     output.spike_times_trace = [output.spike_times_trace; spike_times_trace]; % TODO should speed this up (expanding list).
 
     
