@@ -182,7 +182,7 @@ for sec = 1 : net.sim_time_sec
             inp_spike_idxs = incoming(from_inp, 2);
             dApre_dend(inp_spike_idxs) = dApre_dend(inp_spike_idxs) + net.Apre;
             
-            hid_spike_idxs = incoming(:,1) < axon_start_idx & ~from_inp;
+            hid_spike_idxs = incoming(incoming(:,1) < axon_start_idx & ~from_inp, 2);
             dApre_axon(hid_spike_idxs) = dApre_axon(hid_spike_idxs) + net.Apre;
             if sum(dApre_axon(:)) > 0
                 disp('');
@@ -373,7 +373,7 @@ for sec = 1 : net.sim_time_sec
 
         output.timing_info.plotting_tocs(end + 1) = toc(output.timing_info.plotting_tics(end));
     end
-    
+    sec
     output.spike_times_trace = [output.spike_times_trace; spike_times_trace]; % TODO should speed this up (expanding list).
 
     
