@@ -20,22 +20,27 @@ function [ output ] = runsinglelayer( net )
 
 
 output = struct();
-timing_info = struct();
 output.timing_info.init_time = tic;
 assert(validatenetwork(net), 'Error with network description');
-rand('seed', net.rand_seed);
+rng(net.rand_seed);
 
 % Useful variables to have
 net.N = net.N_inp + net.N_hid + net.N_out;
 net.N_v = net.N_hid + net.N_out;
 neuron_start_idx = net.N_inp + 1;
 axon_start_idx = neuron_start_idx + net.N_hid;
-
+ms_per_sec = 1e3;
 layer_sizes = [net.N_inp, net.N_hid, net.N_out];
 dend_conn_matrix_size = [net.N_hid, net.num_dendrites];
 axon_conn_matrix_size = [net.N_hid, net.num_axons];
 
+% Computation variables
 v = net.v_rest * ones(net.N_v, 1);
+last_spike_time = zeros(net.N, 1) * -Inf;
+vt = zeros(size(v, 1), ms_per_sec);
+vt(:, 1) = v;
+
+neuron_to_plot = net.neuron_to_plot; %#ok<NASGU> Used in plotting
 
 %% Connections
 % Input connections
@@ -91,13 +96,6 @@ if isempty(variance_axon)
     variance_axon = rand(axon_conn_matrix_size) * (net.variance_max - net.variance_min) + net.variance_min;
 end
 
-ms_per_sec = 1e3;
-last_spike_time = zeros(net.N, 1) * -Inf;
-
-% Synapse dynamics parameters
-g_dend = zeros(net.N_hid, 1);
-g_axon = zeros(net.N_out, 1);
-
 % STDP variables
 STDPdecaypre = exp(-1/net.taupre);
 STDPdecaypost = exp(-1/net.taupost);
@@ -108,42 +106,18 @@ dApost_axon = zeros(axon_conn_matrix_size);
 active_spikes = cell(net.delay_max, 1);  % To track when spikes arrive
 active_idx = 1;
 
-% Output data
-spike_time_trace = [];
-output.spike_time_trace = [];
-vt = zeros(size(v, 1), ms_per_sec);
-vt(:, 1) = v;
-
-neuron_to_plot = net.neuron_to_plot;
-
-%% Load data
-% output.timing_info.load_data = tic;
-% %% Data
-% if net.input_source == 'G'
-%     [ inp, ts, patt_inp, patt_ts ] = embedPat( net.N_inp );
-% elseif net.input_source == 'D'
-%     % DVS data
-%     [xs, ys, ts, ps] = loadDVSsegment(128, false, 0);
-%     [xs, ys, ts, ps] = dvs2patch( xs, ys, ts, ps, net.inp_img_size, net.sim_time_sec, 30 );
-%     rows = net.inp_img_size - ys + 1; cols = net.inp_img_size - xs + 1;
-%     inp = sub2ind([net.inp_img_size net.inp_img_size], rows, cols);
-%     ts = floor(ts / 1000);
-% elseif net.input_source == 'S'
-%     inp = net.supplied_input;
-%     ts = net.supplied_ts;
-% else
-%     error(['Unknown input source: ', net.input_source, ' (try G).']);
-% end
-%
-%
-%output.timing_info.load_data = toc(output.timing_info.load_data);
-
+% output variables
 output.timing_info.init_time = toc(output.timing_info.init_time);
 output.timing_info.sim_sec_tics = uint64(zeros(net.sim_time_sec, 1));
 output.timing_info.sim_sec_tocs = zeros(net.sim_time_sec, 1);
+output.timing_info.full_sec_tocs = zeros(net.sim_time_sec, 1);
 output.timing_info.plotting_tics = uint64([]);
 output.timing_info.plotting_tocs = [];
 
+
+output.spike_time_trace = [];
+
+%% Main computational loop
 for sec = 1 : net.sim_time_sec
     
     output.timing_info.sim_sec_times(sec) = tic;
@@ -164,31 +138,26 @@ for sec = 1 : net.sim_time_sec
         %% Caculate input at this step
         Iapp = zeros(size(v));
         % Dendrites
-        t0_dend = time - reshape(last_spike_time(pre_dend), size(pre_dend));   % conn_matrix_size
-        t0negu_dend = t0_dend - delays_dend;               % conn_matrix_size
+        t0_dend = time - reshape(last_spike_time(pre_dend), size(pre_dend));
+        t0negu_dend = t0_dend - delays_dend;
         scale_dend = 1 ./ (variance_dend .* sqrt(2 * pi));
         g_dend = scale_dend .* exp((-1/2) .* ((t0negu_dend) ./ variance_dend) .^2 );
         g_dend(isnan(g_dend)) = 0;
         gaussian_values_dend = w_dend .* g_dend;
+        % Collect input current for hidden layer
         Iapp(1:net.N_hid, :) = sum(gaussian_values_dend(1:net.N_hid, :), 2);
+        
         % Axons
         t0_axon = time - last_spike_time(neuron_start_idx:axon_start_idx - 1);
-        [~, active_conns] = idx2layerid(layer_sizes, post_axon); % convert to id's
+        [~, active_conns] = idx2layerid(layer_sizes, post_axon);
         t0negu_axon = repmat(t0_axon, 1, net.num_axons) - delays_axon;
         scale_axon = 1 ./ (variance_axon .* sqrt(2 * pi));
         g_axon = scale_axon .* exp((-1/2) .* ((t0negu_axon) ./ variance_axon) .^2 );
         g_axon(isnan(g_axon)) = 0;
         gaussian_values_axon = w_axon .* g_axon;
-
-        [to_neurons, ~, to_neurons_idx] = unique(active_conns);  %TODO fix speed
-        if mean(gaussian_values_axon(:)) > 0
-            disp('');
-        end
+        % Collect input current for output layer
+        [to_neurons, ~, to_neurons_idx] = unique(active_conns);  %TODO - optimise for speed if necessary
         Iapp(net.N_hid + to_neurons) = accumarray(to_neurons_idx, gaussian_values_axon(:));
-   
-        if mean(Iapp(:)) > 0
-            disp('')
-        end
         
         %% A spike has arrived do STDP
         incoming = active_spikes{active_idx}; 
@@ -207,14 +176,10 @@ for sec = 1 : net.sim_time_sec
         v = v + (net.v_rest + Iapp - v) / net.neuron_tau;
         vt(:, ms) = v;
         
-        
         %% Deal with neurons that just spiked
-        % TODO: Searching for ts == time is slow if events is large which
-        % it is for real data (searching whole stream). Could trim only
-        % feeding 1 sec to inp per second.
         fired_pixels = inp_trimmed(ts_trimmed == time);
         fired = [find(v >=net.v_thres) + net.N_inp; fired_pixels'; net.N_inp + net.N_hid + inp_trimmed(ts_trimmed == time  & inp_trimmed <= net.N_inp)'];  % TODO Hack to inject spikes
-        spike_time_trace = [spike_time_trace; time*ones(length(fired),1), fired];
+        spike_time_trace = [spike_time_trace; time*ones(length(fired),1), fired]; %#ok<AGROW> TODO - optimise for speed if necessary
         last_spike_time(fired) = time; 
         
         for spike = 1 : length(fired)
@@ -253,7 +218,6 @@ for sec = 1 : net.sim_time_sec
                 
                 variance_axon(hid_conn_idxs) = variance_axon(hid_conn_idxs) + dv;
                 variance_axon = max(net.variance_min, min(net.variance_max, variance_axon));
-            
                 
             elseif neuron_layer == 2  %hid neuron
                 v([neuron_id, find(net.lateral_inhibition_on)*1:net.N_hid]) = net.v_reset;
@@ -340,9 +304,6 @@ for sec = 1 : net.sim_time_sec
         % Synaptic bounding - limit w to [0, w_max]
         w_dend = max(0, min(net.w_max, w_dend)); 
         w_axon = max(0, min(net.w_max, w_axon));
-        %neuron_to_plot = 3;
-        %visualiseweights;
-        %disp('');
         
 %         % Redistribute weak connections
 %         % TODO - add in redistribution for output
@@ -374,14 +335,13 @@ for sec = 1 : net.sim_time_sec
         elseif net.num_dimensions_to_plot == 1
             visualise1Dweights;
         end
-        
 
         output.timing_info.plotting_tocs(end + 1) = toc(output.timing_info.plotting_tics(end));
     end
     
-    fprintf('Second: %d, Elapsed: %.3f \n', sec, output.timing_info.sim_sec_tocs(sec));
-    output.spike_time_trace = [output.spike_time_trace; spike_time_trace]; % TODO should speed this up (expanding list).
-
+    output.spike_time_trace = [output.spike_time_trace; spike_time_trace]; % TODO - optimise for speed if necessary
+    output.timing_info.full_sec_tocs(sec) = toc(output.timing_info.sim_sec_times(sec));
+    fprintf('Second: %d, Elapsed: %.3f \n', sec, output.timing_info.full_sec_tocs(sec));
     
 end
 
