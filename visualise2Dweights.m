@@ -6,9 +6,8 @@
 num_rows = 4;
 num_cols = 5;
 subplot(2, num_cols, 1);
-idxs = ts > (sec - 1) * 1000 & ts <= (sec * 1000);
-[rows, cols] = ind2sub([net.inp_img_size, net.inp_img_size], inp(idxs));
-plot3(cols, rows, ts(idxs) - ((sec - 1) * 1000), '.k');
+[rows, cols] = ind2sub([net.inp_img_size, net.inp_img_size], inp_trimmed);
+plot3(cols, rows, ts_trimmed - (sec - 1) * 1000, '.k');
 axis([ 0 net.inp_img_size 0 net.inp_img_size 0 ms_per_sec]);
 ax = gca;
 set(ax, 'Ydir', 'reverse');

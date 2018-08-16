@@ -5,13 +5,14 @@ num_cols = 5;
 
 subplot(2, num_cols, 1);
 
-idxs = ts > (sec - 1) * 1000 & ts <= (sec * 1000);
-plot(inp(idxs), ts(idxs), '.k');
+%idxs = ts_trimmed > (sec - 1) * 1000 & ts <= (sec * 1000);
+plot(inp_trimmed, ts_trimmed - (sec - 1)*1000, '.k');
 
 % Dendrite weights
 subplot(num_rows, num_cols, 3);
 imagesc(w_dend(neuron_to_plot, :)');
 title('Weight dendrites');
+ylabel('Neuron number');
 colorbar;
 
 subplot(num_rows, num_cols, 4);
@@ -27,6 +28,7 @@ colorbar;
 subplot(num_rows, num_cols, 8);
 imagesc(w_axon(neuron_to_plot, :)');
 title('Weight axons');
+ylabel('Neuron number');
 colorbar;
 
 subplot(num_rows, num_cols, 9);
@@ -43,12 +45,12 @@ colorbar;
 subplot(num_rows, 1, num_rows - 1);
 hold off
 offset = (sec - 1) * 1000;
-filter = find(spike_times_trace(:,2) <= net.N_inp + net.N_hid & spike_times_trace(:,2) > net.N_inp & spike_times_trace(:,1) > offset);
-l2_spike_idxs = spike_times_trace(filter, 2);
-l2_spike_times = spike_times_trace(filter, 1);
-filter = find(spike_times_trace(:,2) < net.N_inp + net.N_hid & spike_times_trace(:, 1) > offset);
-l1_idxs = spike_times_trace(filter, 2);
-l1_times = spike_times_trace(filter, 1);
+filter = find(spike_time_trace(:,2) <= net.N_inp + net.N_hid & spike_time_trace(:,2) > net.N_inp & spike_time_trace(:,1) > offset);
+l2_spike_idxs = spike_time_trace(filter, 2);
+l2_spike_times = spike_time_trace(filter, 1);
+filter = find(spike_time_trace(:,2) < net.N_inp + net.N_hid & spike_time_trace(:, 1) > offset);
+l1_idxs = spike_time_trace(filter, 2);
+l1_times = spike_time_trace(filter, 1);
 % Note this is the SPIKE TIME (not arrival time)
 plot(l1_times - offset, l1_idxs, '.k', 'MarkerSize', 8);
 hold on 

@@ -8,9 +8,6 @@ default_net.inp_img_size = 8;
 default_net.N_hid = 3;
 default_net.N_inp = default_net.inp_img_size * default_net.inp_img_size;
 default_net.N_out = default_net.N_inp;
-% TODO: should remove N and N_v from default net
-default_net.N = default_net.N_inp + default_net.N_hid + default_net.N_out;
-default_net.N_v = default_net.N_hid + default_net.N_out;
 
 % define connections
 % Pass empty matrix to random initialise.
@@ -65,14 +62,7 @@ default_net.Apost = -0.12 * default_net.scaling_factor;
 default_net.num_dimensions_to_plot = 2;
 default_net.neuron_to_plot = 1;
 
-% Data params
-% Options are 'G': Generated, 'D': DVS, 'S': Supplied
-default_net.input_source = 'S';  
-    % if using DVS, fill in below:
-    default_net.input_filename = '';
-    default_net.input_size = default_net.inp_img_size;
-    default_net.input_max_size = 0; % 0 is all.
-    % if supplying inp and ts fill in below
-    default_net.supplied_input = [4, 5, 6, 7, 8, 9 ];
-    default_net.supplied_ts = [1, 5, 10, 15, 20, 25];
+% supply inp and ts below
+default_net.supplied_input = [4, 5, 6, 7, 8, 9 ];
+default_net.supplied_ts = [1, 5, 10, 15, 20, 25];
 end
