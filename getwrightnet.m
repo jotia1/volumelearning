@@ -17,20 +17,20 @@ net = struct();
 % Simulation run parameters
 net.rand_seed = 1;
 net.scaling_factor = 1;
-net.w_init = 1;
-net.w_max = 1;
+net.w_init = 130;
+net.w_max = net.w_init;
 net.syn_mean_thresh = Inf;
 net.weak_con_thres = Inf;
-net.plot_every = Inf;
 net.lateral_inhibition_on = true;
 net.synaptic_scaling_dend = false;
 net.synaptic_scaling_axon = false;
 
 % Neuron params
 net.v_rest = -65;
-net.v_reset = -70;
+net.v_reset = -65;
 net.v_thres = -55;
 net.neuron_tau = 20;
+net.izhikevich_neurons = true;
 
 % Turn off STDP
 net.taupre = 0;
@@ -41,6 +41,7 @@ net.Apost = 0;
 net.inp_img_size = Inf;
 net.num_dimensions_to_plot = 1;
 net.neuron_to_plot = 1;
+net.plot_every = 1;
 
 if ~exist('cond', 'var')
     cond = 1;
@@ -52,33 +53,44 @@ if cond == 1
     % Network structure
     net.N_hid = 2;
     net.N_inp = 3;
-    net.N_out = 3;
+    net.N_out = net.N_hid;
+    net.num_dendrites = net.N_inp;
+    net.num_axons = 1;
     
-    net.sim_time_sec = 60;
-    net.delay_max = 20;
+    net.sim_time_sec = 120;
+    net.delay_max = 15;
     net.delay_min = 1;
-    net.num_dendrites = 3;
-    net.num_axons = 3;
     
-    net.variance_dend = ones(net.N_hid, net.num_dendrites) * 2;
-    net.w_dend = [];
-    net.pre_dend = [];
-    net.delays_dend = [];
+    dend_conn_matrix_size = [net.N_hid, net.num_dendrites];
+    net.variance_dend = ones(dend_conn_matrix_size) * 2;
+    net.w_dend = ones(dend_conn_matrix_size) * 1;
+    net.w_dend(2, :) = 0;
+    net.pre_dend = repmat(1:net.N_inp, net.N_hid, 1);
+    net.delays_dend = ones(dend_conn_matrix_size) * 5;
     
     % SDVL params
-    net.variance_max = 4;
+    net.variance_max = 10;
     net.variance_min = 0.1;
-    net.a1 = 1;
-    net.a2 = 3;
-    net.b1 = 8;
+    net.a1 = 3;
+    net.a2 = 2;
+    net.b1 = 5;
     net.b2 = 5;
-    net.k = 1;
-    net.nu = 0.0338;
-    net.nv = 0.0218;
+    net.nu = 0.03;
+    net.nv = 0.01;
+    net.fgi = 6;
     
     % supply inp and ts below
-    net.supplied_input = [4, 5, 6, 7, 8, 9 ];
-    net.supplied_ts = [1, 5, 10, 15, 20, 25];
+    seq = [0, 3, 7];
+    seconds = 300;
+    net.supplied_input = repmat(1:3, 1, seconds * 2);
+    net.supplied_ts = reshape(repmat(((0:(seconds * 2) -1 )' * 500)', 3, 1), 1, seconds * 3 * 2) + ...
+        repmat(seq, 1, seconds * 2) + 1;
+    
+    % Set up supervision
+    supervised_seconds = 80;
+    net.supplied_input = [net.supplied_input, ones(1, supervised_seconds * 2) * net.N_inp + 1];
+    net.supplied_ts = [net.supplied_ts, ((0:0.5:supervised_seconds - 0.5) * 1000) + 13];
+    
     
 elseif cond == 2
     error('Not yet implemented');
@@ -86,9 +98,9 @@ elseif cond == 3
     error('Not yet implemented');
 end
 
-net.post_axon = [];
-net.delays_axon = [];
-net.w_axon = [];
-net.variance_axon = [];
+net.post_axon = (net.N_inp + net.N_hid + 1 : net.N_inp + net.N_hid + net.N_out)';
+net.delays_axon = ones(net.N_hid, net.num_axons);
+net.w_axon = ones(net.N_hid, net.num_axons);
+net.variance_axon = ones(net.N_hid, net.num_axons);
 
 end

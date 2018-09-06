@@ -42,6 +42,7 @@ default_net.v_rest = -65;
 default_net.v_reset = -70;
 default_net.v_thres = -55;
 default_net.neuron_tau = 20;
+default_net.izhikevich_neurons = false;
 
 % SDVL params
 default_net.variance_max = 4;
@@ -50,7 +51,7 @@ default_net.a1 = 1;
 default_net.a2 = 3;
 default_net.b1 = 8;
 default_net.b2 = 5;
-default_net.k = 1;
+%default_net.k = 1;
 default_net.nu = 0.0338;
 default_net.nv = 0.0218;
 

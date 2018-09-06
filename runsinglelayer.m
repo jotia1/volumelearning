@@ -39,6 +39,7 @@ v = net.v_rest * ones(net.N_v, 1);
 last_spike_time = zeros(net.N, 1) * -Inf;
 vt = zeros(size(v, 1), ms_per_sec);
 vt(:, 1) = v;
+u = 0.2.*v;
 
 neuron_to_plot = net.neuron_to_plot; %#ok<NASGU> Used in plotting
 
@@ -116,10 +117,18 @@ output.timing_info.plotting_tocs = [];
 
 
 output.spike_time_trace = [];
+debug = zeros(net.sim_time_sec * ms_per_sec, 9);
+
+% For gif 
+h = gcf;
+axis tight manual
+filename = 'test.avi';
+writerobj = VideoWriter(filename);
+writerobj.FrameRate = 2;
+open(writerobj);
 
 %% Main computational loop
 for sec = 1 : net.sim_time_sec
-    
     output.timing_info.sim_sec_times(sec) = tic;
 
     spike_time_trace = [];
@@ -135,15 +144,26 @@ for sec = 1 : net.sim_time_sec
         
         time = (sec - 1) * ms_per_sec + ms;
         
+        
         %% Caculate input at this step
         Iapp = zeros(size(v));
         % Dendrites
         t0_dend = time - reshape(last_spike_time(pre_dend), size(pre_dend));
         t0negu_dend = t0_dend - delays_dend;
-        scale_dend = 1 ./ (variance_dend .* sqrt(2 * pi));
-        g_dend = scale_dend .* exp((-1/2) .* ((t0negu_dend) ./ variance_dend) .^2 );
+        %scale_dend = 1 ./ (variance_dend .* sqrt(2 * pi));
+        %g_dend = scale_dend .* exp((-1/2) .* ((t0negu_dend) ./ variance_dend) .^2 );
+        
+        %% FIX
+        p = net.fgi ./ sqrt(2 * pi * variance_dend);
+        g_dend = p .* exp(- (t0negu_dend .^ 2) ./ (2 * variance_dend));
+        
+        
+        
         g_dend(isnan(g_dend)) = 0;
         gaussian_values_dend = w_dend .* g_dend;
+        
+        debug(time, :) = [delays_dend(1, :), variance_dend(1, :), gaussian_values_dend(1, :)];
+        
         % Collect input current for hidden layer
         Iapp(1:net.N_hid, :) = sum(gaussian_values_dend(1:net.N_hid, :), 2);
         
@@ -168,17 +188,28 @@ for sec = 1 : net.sim_time_sec
             dApre_dend(inp_spike_idxs) = dApre_dend(inp_spike_idxs) + net.Apre;
             
             hid_spike_idxs = incoming(incoming(:,1) < axon_start_idx & ~from_inp, 2);
-            dApre_axon(hid_spike_idxs) = dApre_axon(hid_spike_idxs) + net.Apre;
-            
+            dApre_axon(hid_spike_idxs) = dApre_axon(hid_spike_idxs) + net.Apre;   
         end
         
-        %% Update membrane voltages
-        v = v + (net.v_rest + Iapp - v) / net.neuron_tau;
+        %% Update membrane voltages      
+        if net.izhikevich_neurons
+            v = v + 0.5 * ((0.04 * v + 5) .* v + 140 - u + Iapp);       
+            v = v + 0.5 * ((0.04 * v + 5) .* v + 140 - u + Iapp);  % numerical stability
+            u = u + 0.02 .* (0.2 * v - u);
+            
+        else
+            v = v + (net.v_rest + Iapp - v) / net.neuron_tau;
+        end
         vt(:, ms) = v;
         
         %% Deal with neurons that just spiked
         fired_pixels = inp_trimmed(ts_trimmed == time);
-        fired = [find(v >=net.v_thres) + net.N_inp; fired_pixels'; net.N_inp + net.N_hid + inp_trimmed(ts_trimmed == time  & inp_trimmed <= net.N_inp)'];  % TODO Hack to inject spikes
+        if numel(find(fired_pixels == 4)) > 0 && time - last_spike_time(4) < 30   % Only supervise if we havent seen a pixel 4 fire recently.
+            fired_pixels(find(fired_pixels == 4)) = [];
+            fprintf('supervising %d\n', sec*1000 + ms);
+        end
+        %fired = [find(v >=net.v_thres) + net.N_inp; fired_pixels'; net.N_inp + net.N_hid + inp_trimmed(ts_trimmed == time  & inp_trimmed <= net.N_inp)'];  % TODO Hack to inject spikes
+        fired = [find(v >=net.v_thres) + net.N_inp; fired_pixels';];
         spike_time_trace = [spike_time_trace; time*ones(length(fired),1), fired]; %#ok<AGROW> TODO - optimise for speed if necessary
         last_spike_time(fired) = time; 
         
@@ -221,6 +252,10 @@ for sec = 1 : net.sim_time_sec
                 
             elseif neuron_layer == 2  %hid neuron
                 v([neuron_id, find(net.lateral_inhibition_on)*1:net.N_hid]) = net.v_reset;
+                
+                if net.izhikevich_neurons
+                    u(neuron_id) = u(neuron_id) + 8;
+                end
                 
                 % Update STDP of dendrites
                 w_dend(neuron_id, :) = w_dend(neuron_id, :) + dApre_dend(neuron_id, :);
@@ -329,12 +364,57 @@ for sec = 1 : net.sim_time_sec
     %% Plotting
     if mod(sec, net.plot_every) == 0
         output.timing_info.plotting_tics(end + 1) = tic;
+        colormap(hot);
                 
-        if net.num_dimensions_to_plot == 2
-            visualise2Dweights; 
-        elseif net.num_dimensions_to_plot == 1
-            visualise1Dweights;
-        end
+%         if net.num_dimensions_to_plot == 2
+%             visualise2Dweights; 
+%         elseif net.num_dimensions_to_plot == 1
+%             visualise1Dweights;
+%         end
+        suptitle(sprintf('Second: %d', sec));
+        subplot(4, 1, 2);
+        plot(debug(:, 1:3));
+        title('Delays (ms)');
+        legend({'N1', 'N2', 'N3'});
+        
+        subplot(4, 1, 1);
+        plot(debug(:, 4:6));
+        title('Variance (ms)');
+        legend({'N1', 'N2', 'N3'});
+        
+        subplot(2, 1, 2);
+        
+        plot(vt(1, :)');
+        hold on
+        plot((debug((sec -1) * 1000 + 1:sec * 1000, 7:9)*2.5 - 70));
+        hold off
+        title('volatge response and current input');
+        legend({'N4 response', 'N1', 'N2', 'N3'});
+        grid on
+        axis([500 550 -80 -40]);
+        
+        
+        drawnow;
+        
+        frame = getframe(h);
+        writeVideo(writerobj, frame);
+        
+%         im = frame2im(frame);
+%         [imind,cm] = rgb2ind(im,256); 
+%         
+%         % Write to the GIF File 
+%         if sec == 1
+%             imwrite(imind,cm,filename,'gif', 'Loopcount',inf, 'DelayTime',0.5); 
+%         else 
+%             imwrite(imind,cm,filename,'gif','WriteMode','append','DelayTime',0.5); 
+%         end 
+%         
+%         
+%         if sec >= 80
+%             net.plot_every = 1;
+%         end
+            
+        
 
         output.timing_info.plotting_tocs(end + 1) = toc(output.timing_info.plotting_tics(end));
     end
@@ -344,7 +424,7 @@ for sec = 1 : net.sim_time_sec
     fprintf('Second: %d, Elapsed: %.3f \n', sec, output.timing_info.full_sec_tocs(sec));
     
 end
-
+close(writerobj);
 %% Collect final state of variables
 output.pre_dend = pre_dend;
 output.post_dend = post_dend;

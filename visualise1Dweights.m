@@ -16,12 +16,12 @@ ylabel('Neuron number');
 colorbar;
 
 subplot(num_rows, num_cols, 4);
-imagesc(delays_dend(neuron_to_plot, :)');
+imagesc(delays_dend(neuron_to_plot, :)', [net.delay_min, 9]);
 title('Delays dendrites');
 colorbar;
 
 subplot(num_rows, num_cols, 5);
-imagesc(variance_dend(neuron_to_plot, :)');
+imagesc(variance_dend(neuron_to_plot, :)', [net.variance_min, 1]);
 title('Variance dendrite');
 colorbar;
 
@@ -73,7 +73,7 @@ subplot(num_rows, 1, num_rows);
 plot(vt(1, :)');
 legend({'n1'});
 
-drawnow;
+%drawnow;
 
 
 

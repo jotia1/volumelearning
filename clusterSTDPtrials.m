@@ -57,6 +57,7 @@ while exist(output_folder, 'dir') == 7
 end
 
 mkdir(output_folder);
+filename_format = 'w_init-%d_w_max-%d_smt-%d';
 
 for w_init = 5:25
     for w_max = 10:30
@@ -66,7 +67,7 @@ for w_init = 5:25
             net.synaptic_mean_thresh = smt;
 
             out = runsinglelayer(net);
-            save(sprintf('%s/w_init-%d_w_max-%d_smt-%d', output_folder, w_init, w_max, smt), 'net', 'out');
+            save(sprintf(['%s/', filename_format], output_folder, w_init, w_max, smt), 'net', 'out');
         end
     end
 end
