@@ -62,6 +62,7 @@ default_net.Apost = -0.12 * default_net.scaling_factor;
 
 default_net.num_dimensions_to_plot = 2;
 default_net.neuron_to_plot = 1;
+default_net.record_video = false;
 
 % supply inp and ts below
 default_net.supplied_input = [4, 5, 6, 7, 8, 9 ];

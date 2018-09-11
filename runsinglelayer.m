@@ -117,15 +117,17 @@ output.timing_info.plotting_tocs = [];
 
 
 output.spike_time_trace = [];
-debug = zeros(net.sim_time_sec * ms_per_sec, 9);
+debug = zeros(net.sim_time_sec * ms_per_sec, 18);
 
 % For gif 
 h = gcf;
-axis tight manual
-filename = 'test.avi';
-writerobj = VideoWriter(filename);
-writerobj.FrameRate = 2;
-open(writerobj);
+if net.record_video
+    axis tight manual
+    filename = 'test.avi';
+    writerobj = VideoWriter(filename);
+    writerobj.FrameRate = 2;
+    open(writerobj);
+end
 
 %% Main computational loop
 for sec = 1 : net.sim_time_sec
@@ -162,7 +164,7 @@ for sec = 1 : net.sim_time_sec
         g_dend(isnan(g_dend)) = 0;
         gaussian_values_dend = w_dend .* g_dend;
         
-        debug(time, :) = [delays_dend(1, :), variance_dend(1, :), gaussian_values_dend(1, :)];
+        debug(time, :) = [delays_dend(1, :), delays_dend(2, :), variance_dend(1, :),  variance_dend(2, :),gaussian_values_dend(1, :), gaussian_values_dend(2, :)];
         
         % Collect input current for hidden layer
         Iapp(1:net.N_hid, :) = sum(gaussian_values_dend(1:net.N_hid, :), 2);
@@ -191,12 +193,18 @@ for sec = 1 : net.sim_time_sec
             dApre_axon(hid_spike_idxs) = dApre_axon(hid_spike_idxs) + net.Apre;   
         end
         
+        if Iapp(2) > 0
+            disp('');
+        end
+        
         %% Update membrane voltages      
         if net.izhikevich_neurons
             v = v + 0.5 * ((0.04 * v + 5) .* v + 140 - u + Iapp);       
             v = v + 0.5 * ((0.04 * v + 5) .* v + 140 - u + Iapp);  % numerical stability
             u = u + 0.02 .* (0.2 * v - u);
-            
+            if v(2) > -68
+               disp(''); 
+            end
         else
             v = v + (net.v_rest + Iapp - v) / net.neuron_tau;
         end
@@ -206,7 +214,7 @@ for sec = 1 : net.sim_time_sec
         fired_pixels = inp_trimmed(ts_trimmed == time);
         if numel(find(fired_pixels == 4)) > 0 && time - last_spike_time(4) < 30   % Only supervise if we havent seen a pixel 4 fire recently.
             fired_pixels(find(fired_pixels == 4)) = [];
-            fprintf('supervising %d\n', sec*1000 + ms);
+            %fprintf('supervising %d\n', sec*1000 + ms);
         end
         %fired = [find(v >=net.v_thres) + net.N_inp; fired_pixels'; net.N_inp + net.N_hid + inp_trimmed(ts_trimmed == time  & inp_trimmed <= net.N_inp)'];  % TODO Hack to inject spikes
         fired = [find(v >=net.v_thres) + net.N_inp; fired_pixels';];
@@ -373,31 +381,33 @@ for sec = 1 : net.sim_time_sec
 %         end
         suptitle(sprintf('Second: %d', sec));
         subplot(4, 1, 2);
-        plot(debug(:, 1:3));
+        plot(debug(:, 1:6));
         title('Delays (ms)');
-        legend({'N1', 'N2', 'N3'});
+        legend({'N1', 'N2', 'N3', 'N1', 'N2', 'N3'});
         
         subplot(4, 1, 1);
-        plot(debug(:, 4:6));
+        plot(debug(:, 7:12));
         title('Variance (ms)');
-        legend({'N1', 'N2', 'N3'});
+        legend({'N1', 'N2', 'N3', 'N1', 'N2', 'N3'});
         
         subplot(2, 1, 2);
         
-        plot(vt(1, :)');
+        plot(vt(1:2, :)');
         hold on
-        plot((debug((sec -1) * 1000 + 1:sec * 1000, 7:9)*2.5 - 70));
+        plot((debug((sec -1) * 1000 + 1:sec * 1000, 13:18)*2.5 - 70));
         hold off
         title('volatge response and current input');
-        legend({'N4 response', 'N1', 'N2', 'N3'});
+        legend({'N4 response', 'N5 response', 'N1', 'N2', 'N3', 'N1', 'N2', 'N3' });
         grid on
         axis([500 550 -80 -40]);
         
         
         drawnow;
         
-        frame = getframe(h);
-        writeVideo(writerobj, frame);
+        if net.record_video
+            frame = getframe(h);
+            writeVideo(writerobj, frame);
+        end
         
 %         im = frame2im(frame);
 %         [imind,cm] = rgb2ind(im,256); 
@@ -421,10 +431,12 @@ for sec = 1 : net.sim_time_sec
     
     output.spike_time_trace = [output.spike_time_trace; spike_time_trace]; % TODO - optimise for speed if necessary
     output.timing_info.full_sec_tocs(sec) = toc(output.timing_info.sim_sec_times(sec));
-    fprintf('Second: %d, Elapsed: %.3f \n', sec, output.timing_info.full_sec_tocs(sec));
+    %fprintf('Second: %d, Elapsed: %.3f \n', sec, output.timing_info.full_sec_tocs(sec));
     
 end
-close(writerobj);
+if net.record_video
+    close(writerobj);
+end
 %% Collect final state of variables
 output.pre_dend = pre_dend;
 output.post_dend = post_dend;

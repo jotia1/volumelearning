@@ -70,8 +70,8 @@ ylabel('Neuron number');
 
 % Draw voltages
 subplot(num_rows, 1, num_rows);
-plot(vt(1, :)');
-legend({'n1'});
+plot(vt(1:neuron_to_plot, :)');
+legend({'n4', 'n5'});
 
 %drawnow;
 

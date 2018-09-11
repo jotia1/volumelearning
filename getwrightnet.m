@@ -17,7 +17,7 @@ net = struct();
 % Simulation run parameters
 net.rand_seed = 1;
 net.scaling_factor = 1;
-net.w_init = 130;
+net.w_init = 1;
 net.w_max = net.w_init;
 net.syn_mean_thresh = Inf;
 net.weak_con_thres = Inf;
@@ -26,8 +26,8 @@ net.synaptic_scaling_dend = false;
 net.synaptic_scaling_axon = false;
 
 % Neuron params
-net.v_rest = -65;
-net.v_reset = -65;
+net.v_rest = -70;
+net.v_reset = -70;
 net.v_thres = -55;
 net.neuron_tau = 20;
 net.izhikevich_neurons = true;
@@ -41,7 +41,8 @@ net.Apost = 0;
 net.inp_img_size = Inf;
 net.num_dimensions_to_plot = 1;
 net.neuron_to_plot = 1;
-net.plot_every = 1;
+net.plot_every = Inf;
+net.record_video = false;
 
 if ~exist('cond', 'var')
     cond = 1;
@@ -57,7 +58,7 @@ if cond == 1
     net.num_dendrites = net.N_inp;
     net.num_axons = 1;
     
-    net.sim_time_sec = 120;
+    net.sim_time_sec = 300;
     net.delay_max = 15;
     net.delay_min = 1;
     
@@ -81,15 +82,14 @@ if cond == 1
     
     % supply inp and ts below
     seq = [0, 3, 7];
-    seconds = 300;
-    net.supplied_input = repmat(1:3, 1, seconds * 2);
-    net.supplied_ts = reshape(repmat(((0:(seconds * 2) -1 )' * 500)', 3, 1), 1, seconds * 3 * 2) + ...
-        repmat(seq, 1, seconds * 2) + 1;
+    net.supplied_input = repmat(1:3, 1, net.sim_time_sec * 2);
+    net.supplied_ts = reshape(repmat(((0:(net.sim_time_sec * 2) -1 )' * 500)', 3, 1), 1, net.sim_time_sec * 3 * 2) + ...
+        repmat(seq, 1, net.sim_time_sec * 2) + 1;
     
     % Set up supervision
-    supervised_seconds = 80;
-    net.supplied_input = [net.supplied_input, ones(1, supervised_seconds * 2) * net.N_inp + 1];
-    net.supplied_ts = [net.supplied_ts, ((0:0.5:supervised_seconds - 0.5) * 1000) + 13];
+    net.supervised_seconds = 100;
+    net.supplied_input = [net.supplied_input, ones(1, net.supervised_seconds * 2) * net.N_inp + 1];
+    net.supplied_ts = [net.supplied_ts, ((0:0.5:net.supervised_seconds - 0.5) * 1000) + 13];
     
     
 elseif cond == 2
