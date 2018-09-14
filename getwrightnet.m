@@ -26,9 +26,9 @@ net.synaptic_scaling_dend = false;
 net.synaptic_scaling_axon = false;
 
 % Neuron params
-net.v_rest = -70;
-net.v_reset = -70;
-net.v_thres = -55;
+net.v_rest = -65;
+net.v_reset = -65;
+net.v_thres = 30;
 net.neuron_tau = 20;
 net.izhikevich_neurons = true;
 
@@ -78,7 +78,7 @@ if cond == 1
     net.b2 = 5;
     net.nu = 0.03;
     net.nv = 0.01;
-    net.fgi = 6;
+    net.fgi = 13;
     
     % supply inp and ts below
     seq = [0, 3, 7];
