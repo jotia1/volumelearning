@@ -118,12 +118,13 @@ output.timing_info.plotting_tocs = [];
 
 output.spike_time_trace = [];
 debug = zeros(net.sim_time_sec * ms_per_sec, 18);
+debug2 = [];
 
 % For gif 
 h = gcf;
 if net.record_video
     axis tight manual
-    filename = 'test.avi';
+    filename = 'workingSDVL.avi';
     writerobj = VideoWriter(filename);
     writerobj.FrameRate = 2;
     open(writerobj);
@@ -164,7 +165,7 @@ for sec = 1 : net.sim_time_sec
         g_dend(isnan(g_dend)) = 0;
         gaussian_values_dend = w_dend .* g_dend;
         
-        debug(time, :) = [delays_dend(1, :), delays_dend(2, :), variance_dend(1, :),  variance_dend(2, :),gaussian_values_dend(1, :), gaussian_values_dend(2, :)];
+        
         
         % Collect input current for hidden layer
         Iapp(1:net.N_hid, :) = sum(gaussian_values_dend(1:net.N_hid, :), 2);
@@ -199,8 +200,8 @@ for sec = 1 : net.sim_time_sec
         
         %% Update membrane voltages      
         if net.izhikevich_neurons
-            v = v + 0.5 * ((0.04 * v + 5) .* v + 140 - u + Iapp);       
-            v = v + 0.5 * ((0.04 * v + 5) .* v + 140 - u + Iapp);  % numerical stability
+            %v = v + 0.5 * ((0.04 * v + 5) .* v + 140 - u + Iapp);       
+            v = v + ((0.04 * v + 5) .* v + 140 - u + Iapp);  % numerical stability
             u = u + 0.02 .* (0.2 * v - u);
             if v(2) > -68
                disp(''); 
@@ -212,12 +213,18 @@ for sec = 1 : net.sim_time_sec
         
         %% Deal with neurons that just spiked
         fired_pixels = inp_trimmed(ts_trimmed == time);
-        if numel(find(fired_pixels == 4)) > 0 && time - last_spike_time(4) < 30   % Only supervise if we havent seen a pixel 4 fire recently.
-            fired_pixels(find(fired_pixels == 4)) = [];
-            %fprintf('supervising %d\n', sec*1000 + ms);
+        if numel(find(fired_pixels == 4)) > 0
+               disp('');
         end
+
         %fired = [find(v >=net.v_thres) + net.N_inp; fired_pixels'; net.N_inp + net.N_hid + inp_trimmed(ts_trimmed == time  & inp_trimmed <= net.N_inp)'];  % TODO Hack to inject spikes
-        fired = [find(v >=net.v_thres) + net.N_inp; fired_pixels';];
+        fired_naturally = find(v >=net.v_thres) + net.N_inp;
+        %  if      supervised                and       it fired recently         or     is firing now.
+        if numel(find(fired_pixels == 4)) > 0 && (time - last_spike_time(4) < 30 || numel(find(fired_naturally == 4)) > 0)   % Only supervise if we havent seen a pixel 4 fire recently.
+            fired_pixels(find(fired_pixels == 4)) = [];
+            %fprintf('Remove supervision %d\n', sec*1000 + ms);
+        end
+        fired =  [fired_naturally; fired_pixels';];
         spike_time_trace = [spike_time_trace; time*ones(length(fired),1), fired]; %#ok<AGROW> TODO - optimise for speed if necessary
         last_spike_time(fired) = time; 
         
@@ -244,7 +251,7 @@ for sec = 1 : net.sim_time_sec
                 
                 % Update SDVL mean
                 du = zeros(size(hid_conn_idxs));
-                du(t0_axon >= net.a2) = -k(t0_axon >= net.a2) .* net.nu;
+                du(t0_axon > net.a2) = -k(t0_axon > net.a2) .* net.nu;
                 du(abst0negu_axon >= net.a1) = shifts(abst0negu_axon >= net.a1);% TODO: verify this line is correct, made an edit without checkign the maths.
                 
                 delays_axon(hid_conn_idxs) = delays_axon(hid_conn_idxs) + du;
@@ -258,10 +265,13 @@ for sec = 1 : net.sim_time_sec
                 variance_axon(hid_conn_idxs) = variance_axon(hid_conn_idxs) + dv;
                 variance_axon = max(net.variance_min, min(net.variance_max, variance_axon));
                 
+
             elseif neuron_layer == 2  %hid neuron
                 v([neuron_id, find(net.lateral_inhibition_on)*1:net.N_hid]) = net.v_reset;
                 
                 if net.izhikevich_neurons
+                    % TODO - bug, if lateral inhibition on, need to reset
+                    % all that fired here else just 1. 
                     u(neuron_id) = u(neuron_id) + 8;
                 end
                 
@@ -295,6 +305,11 @@ for sec = 1 : net.sim_time_sec
                 du(t0_dend >= net.a2) = -k(t0_dend >= net.a2) .* net.nu;             % t0 >= a2
                 du(abst0negu_dend >= net.a1) = shifts(abst0negu_dend >= net.a1); % |t0-u| >= a1
                 
+%                 if neuron_id == 1
+%                     disp([du; dv]);
+%                     disp('--');
+%                 end
+                
                 delays_dend(neuron_id, :) = delays_dend(neuron_id, :) + du;
                 delays_dend = max(1, min(net.delay_max, delays_dend));
                 
@@ -305,7 +320,11 @@ for sec = 1 : net.sim_time_sec
 
                 variance_dend(neuron_id, :) = variance_dend(neuron_id, :) + dv;
                 variance_dend = max(net.variance_min, min(net.variance_max, variance_dend));
-
+                
+                if neuron_id == 2
+                   debug2 = [debug2; du(:)', dv(:)']; 
+                end
+                
             else  % First layer (input)
                 conn_idxs = post_dend{neuron_id};
                 % penalise connection(s) if the postsynaptic spiked recently.
@@ -347,6 +366,7 @@ for sec = 1 : net.sim_time_sec
         % Synaptic bounding - limit w to [0, w_max]
         w_dend = max(0, min(net.w_max, w_dend)); 
         w_axon = max(0, min(net.w_max, w_axon));
+        debug(time, :) = [delays_dend(1, :), delays_dend(2, :), variance_dend(1, :),  variance_dend(2, :),gaussian_values_dend(1, :), gaussian_values_dend(2, :)];
         
 %         % Redistribute weak connections
 %         % TODO - add in redistribution for output
@@ -374,35 +394,36 @@ for sec = 1 : net.sim_time_sec
         output.timing_info.plotting_tics(end + 1) = tic;
         colormap(hot);
                 
-%         if net.num_dimensions_to_plot == 2
-%             visualise2Dweights; 
-%         elseif net.num_dimensions_to_plot == 1
-%             visualise1Dweights;
-%         end
+        if net.num_dimensions_to_plot == 2
+            visualise2Dweights; 
+        elseif net.num_dimensions_to_plot == 1
+            visualise1Dweights;
+        end
         suptitle(sprintf('Second: %d', sec));
         subplot(4, 1, 2);
-        plot(debug(:, 1:6));
+        plot(debug(:, 1:3));
         title('Delays (ms)');
-        legend({'N1', 'N2', 'N3', 'N1', 'N2', 'N3'});
+        legend({'N1', 'N2', 'N3'});
         
         subplot(4, 1, 1);
-        plot(debug(:, 7:12));
+        plot(debug(:, 7:9));
         title('Variance (ms)');
-        legend({'N1', 'N2', 'N3', 'N1', 'N2', 'N3'});
+        legend({'N1', 'N2', 'N3'});
         
-        subplot(2, 1, 2);
+        %subplot(2, 1, 2);
         
-        plot(vt(1:2, :)');
-        hold on
-        plot((debug((sec -1) * 1000 + 1:sec * 1000, 13:18)*2.5 - 70));
-        hold off
-        title('volatge response and current input');
-        legend({'N4 response', 'N5 response', 'N1', 'N2', 'N3', 'N1', 'N2', 'N3' });
-        grid on
-        axis([500 550 -80 -40]);
+%         plot((debug((sec -1) * 1000 + 1:sec * 1000, 13:15)*2.5 - 70));
+%         hold on
+%         plot(vt(1, :)');
+%         hold off
+%         title('volatge response and current input');
+%         legend({ 'N1', 'N2', 'N3', 'N4 response' });
+%         %legend({'N4 response', 'N5 response', 'N1', 'N2', 'N3', 'N1', 'N2', 'N3' });
+%         grid on
+%         axis([500 550 -Inf Inf]);
         
         
-        drawnow;
+         drawnow;
         
         if net.record_video
             frame = getframe(h);
